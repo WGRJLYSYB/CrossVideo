@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      CROSSVIDEO_SECRET_KEY: ${CROSSVIDEO_SECRET_KEY:?CROSSVIDEO_SECRET_KEY is required}
+      CROSSVIDEO_DATABASE_URL: sqlite:////data/crossvideo.db
+      CROSSVIDEO_CORS_ORIGINS: '["*"]'
+    volumes:
+      - ./data:/data
