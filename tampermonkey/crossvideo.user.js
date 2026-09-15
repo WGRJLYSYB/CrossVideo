@@ -3,6 +3,8 @@
 // @namespace    https://github.com/crossvideo
 // @version      0.1.0
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
+// @author       Gavin Newsom
+// @license      MIT
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
