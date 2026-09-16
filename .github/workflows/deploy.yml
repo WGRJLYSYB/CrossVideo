@@ -1,0 +1,33 @@
+name: Deploy to Server (Non-Root)
+
+on:
+  push:
+    branches:
+      - main  # 仅当合并或推送到 main 分支时触发自动部署
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Deploy with Non-Root User
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # 1. 进入指定部署目录
+            cd ${{ secrets.TARGET_DIR }}
+            
+            # 2. 拉取仓库最新代码
+            git pull origin main
+            
+            # 3. 进入后端编排目录
+            cd backend
+
+            # 4. 停止并重新构建启动 Docker 容器（免 sudo）
+            docker compose down
+            docker compose up -d --build
+            
+            # 5. 清理残留的虚悬镜像（悬空镜像）
+            docker image prune -f

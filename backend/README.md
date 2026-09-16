@@ -16,15 +16,17 @@ uv python install 3.12    # optional
 uv python pin 3.12
 uv venv --python 3.12    # create venv
 uv pip install -r requirements.txt
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --log-config logging.ini
 
 # 项目模式
 cd backend
 uv init
 uv python pin 3.12
 uv add -r requirements.txt
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --log-config logging.ini
 ```
+
+Uvicorn 使用 `logging.ini` 输出带时间戳的应用和访问日志。
 
 The API is available at `http://localhost:8000`, with OpenAPI docs at `/docs`.
 
