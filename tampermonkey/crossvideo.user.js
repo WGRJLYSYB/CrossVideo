@@ -11,6 +11,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
+// @grant        GM_addValueChangeListener
 // @connect      *
 // ==/UserScript==
 
@@ -21,6 +22,7 @@
     const TOKEN_KEY = 'crossvideo_access_token';
     const USERNAME_KEY = 'crossvideo_username';
     const API_BASE_KEY = 'crossvideo_api_base';
+    const MENU_REVISION_KEY = 'crossvideo_menu_revision';
     const state = {
         activeVideo: null,
         session: null,
@@ -201,11 +203,12 @@
     const sync = async (session) => {
         if (!session || !session.qualified || !token() || !Number.isFinite(session.video.duration)) return;
         try {
+            if (document.title) session.title = document.title;
             await request('POST', '/progress/sync', {
                 site_host: siteHost(),
                 url_hash: session.urlHash,
                 clean_url: session.cleanUrl,
-                title: document.title || session.cleanUrl,
+                title: session.title || document.title || session.cleanUrl,
                 progress_seconds: session.video.currentTime,
                 duration: session.video.duration,
                 client_updated_at: new Date().toISOString(),
@@ -216,11 +219,16 @@
     const startSession = async (video) => {
         if (state.session?.video === video && state.session.routeUrl === location.href) return;
         if (state.timer) window.clearInterval(state.timer);
+        state.session?.cleanup?.();
         removeToast();
         state.activeVideo = video;
         const url = cleanUrl();
-        const session = { video, routeUrl: location.href, cleanUrl: url, urlHash: await sha256(url), interacted: false, playedSeconds: 0, qualified: false, restored: false };
+        const session = { video, routeUrl: location.href, cleanUrl: url, urlHash: await sha256(url), title: document.title || url, interacted: false, playedSeconds: 0, qualified: false, restored: false };
         state.session = session;
+        const updateTitle = () => {
+            if (document.title && document.title !== session.title) session.title = document.title;
+        };
+        updateTitle();
         const markInteraction = () => { session.interacted = true; };
         video.addEventListener('click', markInteraction, { once: false });
         video.addEventListener('volumechange', markInteraction, { once: false });
@@ -230,6 +238,14 @@
         });
         video.addEventListener('pause', () => sync(session));
         video.addEventListener('ended', () => sync(session));
+        document.addEventListener('visibilitychange', updateTitle);
+        const titleObserver = new MutationObserver(updateTitle);
+        const titleElement = document.querySelector('title');
+        if (titleElement) titleObserver.observe(titleElement, { childList: true, characterData: true, subtree: true });
+        session.cleanup = () => {
+            document.removeEventListener('visibilitychange', updateTitle);
+            titleObserver.disconnect();
+        };
         state.timer = window.setInterval(() => {
             if (!session.video.paused) sync(session);
         }, 15000);
@@ -282,6 +298,7 @@
                 GM_setValue(TOKEN_KEY, result.access_token);
                 GM_setValue(USERNAME_KEY, result.username || data.username);
                 root.innerHTML = '';
+                GM_setValue(MENU_REVISION_KEY, Date.now());
                 registerMenus();
                 showNotice('登录成功');
                 scan();
@@ -370,6 +387,7 @@
         GM_setValue(USERNAME_KEY, '');
         root.innerHTML = '';
         showNotice('已退出登录');
+        GM_setValue(MENU_REVISION_KEY, Date.now());
         registerMenus();
     };
     const toggleBlockedSite = async () => {
@@ -384,6 +402,7 @@
                 await request('POST', '/progress/blocked-sites', { site_host: siteHost() });
                 showNotice('已拉黑当前网站，并删除该网站历史记录');
             }
+            GM_setValue(MENU_REVISION_KEY, Date.now());
             registerMenus();
         } catch (error) { showNotice(error.message); }
     };
@@ -406,6 +425,7 @@
         }
     };
     registerMenus();
+    GM_addValueChangeListener(MENU_REVISION_KEY, () => registerMenus());
 
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
@@ -413,6 +433,7 @@
         if (state.routeUrl === location.href) return;
         state.routeUrl = location.href;
         if (state.timer) window.clearInterval(state.timer);
+        state.session?.cleanup?.();
         state.session = null;
         removeToast();
         window.setTimeout(scan, 500);
