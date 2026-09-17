@@ -50,4 +50,6 @@ docker compose up --build
 
 The Compose configuration mounts `backend/data` into the container at `/data`, so the SQLite database is stored at `backend/data/crossvideo.db` on the host. Set `CROSSVIDEO_SECRET_KEY` to a random value before deploying and preserve both `backend/data` and the secret when migrating servers.
 
+Compose also starts `sqlite-web` at `http://127.0.0.1:8081` by default. Set `SQLITE_WEB_PASSWORD` in `.env` before starting. For remote administration, use an SSH tunnel such as `ssh -L 8081:127.0.0.1:8081 user@server`; keeping the port bound to localhost avoids exposing a database editor directly to the public network.
+
 Authenticated users can block a website from the userscript menu. Blocking removes that user's existing records for the exact hostname and causes future sync requests from that hostname to be ignored.

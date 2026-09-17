@@ -1,11 +1,26 @@
 services:
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
+      TZ: Asia/Shanghai
       CROSSVIDEO_SECRET_KEY: ${CROSSVIDEO_SECRET_KEY:?CROSSVIDEO_SECRET_KEY is required}
       CROSSVIDEO_DATABASE_URL: sqlite:////data/crossvideo.db
       CROSSVIDEO_CORS_ORIGINS: '["*"]'
     volumes:
       - ./data:/data
+
+  sqlite-web:
+    image: coleifer/sqlite-web:latest
+    restart: unless-stopped
+    ports:
+      - "${SQLITE_WEB_PORT:-8081}:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SQLITE_WEB_PASSWORD: ${SQLITE_WEB_PASSWORD:?SQLITE_WEB_PASSWORD is required}
+    entrypoint: ["sh", "-c"]
+    command: ["sqlite_web --host 0.0.0.0 --port 8080 --password \"$${SQLITE_WEB_PASSWORD}\" /data/crossvideo.db"]
+    volumes:
+      - ./data:/data:ro
