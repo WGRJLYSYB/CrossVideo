@@ -1,0 +1,12 @@
+{$CADDY_SITE_ADDRESS} {
+    encode gzip
+
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle {
+        root * /srv/admin
+        file_server
+    }
+}

@@ -382,28 +382,52 @@
 
     let menuIds = [];
     let menuVersion = 0;
+    let menuRefreshTimer;
+    const blockedSiteCache = { host: '', value: false, expiresAt: 0, request: null };
+
+    const getBlockedForCurrentSite = async (force = false) => {
+        const host = siteHost();
+        if (!force && blockedSiteCache.host === host && blockedSiteCache.expiresAt > Date.now()) return blockedSiteCache.value;
+        if (!force && blockedSiteCache.request) return blockedSiteCache.request;
+        blockedSiteCache.host = host;
+        blockedSiteCache.request = request('GET', '/progress/blocked-sites')
+            .then((result) => {
+                blockedSiteCache.value = result.items.includes(host);
+                blockedSiteCache.expiresAt = Date.now() + 5000;
+                return blockedSiteCache.value;
+            })
+            .finally(() => { blockedSiteCache.request = null; });
+        return blockedSiteCache.request;
+    };
+
+    const scheduleMenuRefresh = () => {
+        window.clearTimeout(menuRefreshTimer);
+        menuRefreshTimer = window.setTimeout(() => registerMenus(), 250);
+    };
     const logout = () => {
         GM_setValue(TOKEN_KEY, '');
         GM_setValue(USERNAME_KEY, '');
         root.innerHTML = '';
         showNotice('已退出登录');
         GM_setValue(MENU_REVISION_KEY, Date.now());
-        registerMenus();
+        scheduleMenuRefresh();
     };
     const toggleBlockedSite = async () => {
         if (!token()) { showAuth(); return; }
         try {
-            const result = await request('GET', '/progress/blocked-sites');
-            const blocked = result.items.includes(siteHost());
+            const blocked = await getBlockedForCurrentSite();
             if (blocked) {
                 await request('DELETE', `/progress/blocked-sites/${encodeURIComponent(siteHost())}`);
+                blockedSiteCache.value = false;
                 showNotice('已解除当前网站黑名单');
             } else {
                 await request('POST', '/progress/blocked-sites', { site_host: siteHost() });
+                blockedSiteCache.value = true;
                 showNotice('已拉黑当前网站，并删除该网站历史记录');
             }
+            blockedSiteCache.expiresAt = Date.now() + 5000;
             GM_setValue(MENU_REVISION_KEY, Date.now());
-            registerMenus();
+            scheduleMenuRefresh();
         } catch (error) { showNotice(error.message); }
     };
     const registerMenus = async () => {
@@ -419,13 +443,16 @@
         menuIds.push(GM_registerMenuCommand('📜 查看播放历史', showHistory));
         if (loggedIn) {
             let blocked = false;
-            try { blocked = (await request('GET', '/progress/blocked-sites')).items.includes(siteHost()); } catch (_) { /* Menu remains usable while offline. */ }
+            try { blocked = await getBlockedForCurrentSite(); } catch (_) { /* Menu remains usable while offline. */ }
             if (version !== menuVersion) return;
             menuIds.push(GM_registerMenuCommand(blocked ? '✅ 解除当前网站黑名单' : '🚫 拉黑当前网站', toggleBlockedSite));
         }
     };
     registerMenus();
-    GM_addValueChangeListener(MENU_REVISION_KEY, () => registerMenus());
+    GM_addValueChangeListener(MENU_REVISION_KEY, () => {
+        blockedSiteCache.expiresAt = 0;
+        scheduleMenuRefresh();
+    });
 
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;

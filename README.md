@@ -55,7 +55,7 @@ http://127.0.0.1:8000
 
 PostgreSQL 数据会保存到 Docker 命名卷 `backend_postgres-data`。
 
-### 方式二：使用 uv 本地运行
+PostgreSQL 数据会保存到 Docker 命名卷 `backend_postgres-data`，数据库结构由 Alembic 管理。
 
 要求 Python 3.11 以上，推荐 Python 3.12 和 uv。
 
@@ -76,6 +76,7 @@ uv run pytest tests -q
 ## 安装油猴脚本
 
 1. 安装 Tampermonkey 或 Violentmonkey。
+脚本会自动补充 `/api/v1` 路径。FastAPI 和 PostgreSQL 只在 Docker 内部网络可见。
 2. 打开 [tampermonkey/crossvideo.user.js](tampermonkey/crossvideo.user.js)。
 3. 将文件内容复制到新建的用户脚本中并保存。
 4. 打开任意视频页面，从油猴菜单进入“登录 / 注册账号”。

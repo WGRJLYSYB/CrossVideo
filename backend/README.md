@@ -16,6 +16,7 @@ uv python install 3.12    # optional
 uv python pin 3.12
 uv venv --python 3.12    # create venv
 uv pip install -r requirements.txt
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --log-config logging.ini
 
 # 项目模式
@@ -23,6 +24,7 @@ cd backend
 uv init
 uv python pin 3.12
 uv add -r requirements.txt
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --log-config logging.ini
 ```
 
@@ -39,7 +41,7 @@ cd backend
 uv run pytest tests -q
 ```
 
-The production database is PostgreSQL. The Compose volume `postgres-data` persists database data independently from the API container.
+The production database is PostgreSQL. Alembic manages all schema changes. The Compose volume `postgres-data` persists database data independently from the API container.
 
 ## Docker
 
@@ -48,6 +50,10 @@ cd backend
 docker compose up --build
 ```
 
-Compose starts PostgreSQL with a persistent `postgres-data` volume. Set `POSTGRES_PASSWORD` and `CROSSVIDEO_SECRET_KEY` in `.env` before starting. The previous SQLite database is not migrated automatically; export/import it separately if existing history must be retained.
+Compose starts PostgreSQL with a persistent `postgres-data` volume and runs `alembic upgrade head` before starting the API. Set `POSTGRES_PASSWORD`, `CROSSVIDEO_SECRET_KEY`, and `CADDY_SITE_ADDRESS` in `.env` before starting.
+
+Caddy is the only public application entry point. It proxies `/api/*` to FastAPI and serves static files from `backend/admin/`. Ports `8000` and `5432` are not published to the host.
+
+For a server IP, Caddy can attempt automatic HTTPS when ports 80 and 443 are publicly reachable. Public CA support for IP certificates varies; a real domain name is the most portable option. If Caddy falls back to its internal CA, browsers will require trusting that CA manually.
 
 Authenticated users can block a website from the userscript menu. Blocking removes that user's existing records for the exact hostname and causes future sync requests from that hostname to be ignored.

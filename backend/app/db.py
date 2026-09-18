@@ -25,22 +25,6 @@ if settings.database_url.startswith("sqlite"):
         cursor.close()
 
 
-def init_db() -> None:
-    from . import models
-
-    Base.metadata.create_all(bind=engine)
-    if settings.database_url.startswith("sqlite"):
-        with engine.begin() as connection:
-            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(users)")}
-            if "failed_login_attempts" not in columns:
-                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
-            if "locked_until" not in columns:
-                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN locked_until DATETIME")
-            progress_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(playback_progress)")}
-            if "site_host" not in progress_columns:
-                connection.exec_driver_sql("ALTER TABLE playback_progress ADD COLUMN site_host VARCHAR(255)")
-
-
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
