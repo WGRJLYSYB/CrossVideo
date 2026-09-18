@@ -45,7 +45,8 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "9443:443"
+      - "443:443"
+      - "80:80"
     environment:
       TZ: Asia/Shanghai
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
