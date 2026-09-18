@@ -2,6 +2,10 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -41,7 +45,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "443:443"
+      - "9443:443"
     environment:
       TZ: Asia/Shanghai
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
