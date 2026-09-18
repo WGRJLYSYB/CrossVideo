@@ -1,16 +1,5 @@
-{
-    log {
-        format console {
-            time_format "2006-01-02 15:04:05.000"
-            time_local
-        }
-    }
-}
-
 {$CADDY_SITE_ADDRESS} {
-    tls {
-        issuer acme https://acme-v02.api.letsencrypt.org/directory
-    }
+    tls /etc/caddy/cert/{$CADDY_CERT_FULLCHAIN} /etc/caddy/cert/{$CADDY_CERT_PRIVKEY}
     encode gzip
 
     handle /api/* {

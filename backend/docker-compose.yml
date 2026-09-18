@@ -50,6 +50,7 @@ services:
       - ./admin:/srv/admin:ro
       - caddy-data:/data
       - caddy-config:/config
+      - ${CADDY_CERT_DIR:?CADDY_CERT_DIR is required}:/etc/caddy/cert:ro
 
 volumes:
   postgres-data:
