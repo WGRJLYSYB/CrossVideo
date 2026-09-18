@@ -5,7 +5,7 @@ FastAPI service for authentication and cross-device video progress sync.
 ## Requirements
 
 - Python 3.11 or newer (3.12 recommended)
-- SQLite 3
+- PostgreSQL 16 or newer
 
 ## Local setup
 
@@ -39,7 +39,7 @@ cd backend
 uv run pytest tests -q
 ```
 
-The default SQLite database is `crossvideo.db`. SQLite WAL mode and foreign keys are enabled at connection time.
+The production database is PostgreSQL. The Compose volume `postgres-data` persists database data independently from the API container.
 
 ## Docker
 
@@ -48,8 +48,6 @@ cd backend
 docker compose up --build
 ```
 
-The Compose configuration mounts `backend/data` into the container at `/data`, so the SQLite database is stored at `backend/data/crossvideo.db` on the host. Set `CROSSVIDEO_SECRET_KEY` to a random value before deploying and preserve both `backend/data` and the secret when migrating servers.
-
-Compose also starts `sqlite-web` at `http://127.0.0.1:8081` by default. Set `SQLITE_WEB_PASSWORD` in `.env` before starting. For remote administration, use an SSH tunnel such as `ssh -L 8081:127.0.0.1:8081 user@server`; keeping the port bound to localhost avoids exposing a database editor directly to the public network.
+Compose starts PostgreSQL with a persistent `postgres-data` volume. Set `POSTGRES_PASSWORD` and `CROSSVIDEO_SECRET_KEY` in `.env` before starting. The previous SQLite database is not migrated automatically; export/import it separately if existing history must be retained.
 
 Authenticated users can block a website from the userscript menu. Blocking removes that user's existing records for the exact hostname and causes future sync requests from that hostname to be ignored.

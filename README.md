@@ -19,7 +19,7 @@
 
 ```text
 CrossVideo/
-├── backend/       # FastAPI 服务、SQLite 数据库和 Docker 配置
+├── backend/       # FastAPI 服务、PostgreSQL 配置和 Docker 编排
 ├── tampermonkey/   # 油猴脚本
 └── PRD.md          # 项目需求文档
 ```
@@ -53,11 +53,7 @@ docker compose up --build
 http://127.0.0.1:8000
 ```
 
-SQLite 数据库会保存到宿主机：
-
-```text
-backend/data/crossvideo.db
-```
+PostgreSQL 数据会保存到 Docker 命名卷 `backend_postgres-data`。
 
 ### 方式二：使用 uv 本地运行
 
@@ -129,7 +125,7 @@ Docker Compose 使用宿主机目录挂载：
 - `backend/.env`
 - `CROSSVIDEO_SECRET_KEY`
 
-密钥变化会导致原有 JWT Token 失效。数据库文件、WAL 文件、环境变量和虚拟环境已加入 Git 忽略规则。
+密钥变化会导致原有 JWT Token 失效。环境变量、虚拟环境和本地数据库文件已加入 Git 忽略规则。
 
 ## 安全说明
 
