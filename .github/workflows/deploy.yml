@@ -32,5 +32,11 @@ jobs:
 
             cd backend
 
+            # 1. 启动或拉起有变化的容器
             docker compose up -d --build --remove-orphans
+
+            # 2. 强制 Caddy 平滑加载最新的 Caddyfile（零中断，无需重启容器），true防止首次启动失败导致整个部署失败
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
+
+            # 3. 清理构建产生的悬空镜像
             docker image prune -f

@@ -2,7 +2,7 @@
     debug
 }
 
-{$CADDY_SITE_ADDRESS} {
+https://{$CADDY_SITE_ADDRESS} {
     tls /etc/caddy/cert/{$CADDY_CERT_FULLCHAIN} /etc/caddy/cert/{$CADDY_CERT_PRIVKEY}
     encode gzip
     log
