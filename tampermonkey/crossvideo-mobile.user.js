@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.0
+// @version      0.1.1
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
