@@ -257,7 +257,8 @@
     const fab = document.createElement('button');
     fab.className = 'cv-mobile-fab';
     fab.type = 'button';
-    fab.textContent = '▶';
+    fab.textContent = '☷';
+    fab.setAttribute('aria-label', '打开 CrossVideo 菜单');
     fab.title = 'CrossVideo';
     fab.onclick = () => token() ? showHistory() : showAuth();
     root.appendChild(fab);
