@@ -12,6 +12,12 @@ from ..schemas import LoginRequest, RegisterRequest, TokenResponse
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC) if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 @router.post("/register", status_code=status.HTTP_200_OK)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, str]:
     try:
@@ -38,8 +44,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     now = datetime.now(UTC)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
-    if user.locked_until and user.locked_until.replace(tzinfo=UTC) > now:
-        retry_after = int((user.locked_until.replace(tzinfo=UTC) - now).total_seconds()) + 1
+    locked_until = as_utc(user.locked_until)
+    if locked_until and locked_until > now:
+        retry_after = int((locked_until - now).total_seconds()) + 1
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"too many login attempts; retry in {retry_after} seconds", headers={"Retry-After": str(retry_after)})
     if not verify_password(payload.password, user.hashed_password):
         user.failed_login_attempts += 1

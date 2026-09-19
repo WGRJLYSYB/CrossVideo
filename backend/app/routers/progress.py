@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
 def as_utc(value: datetime | None) -> datetime | None:
     if value is None or value.tzinfo is not None:
-        return value
+        return value.astimezone(UTC) if value is not None else None
     return value.replace(tzinfo=UTC)
 
 

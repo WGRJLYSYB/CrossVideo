@@ -24,10 +24,10 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("username", sa.String(length=50), nullable=False),
             sa.Column("hashed_password", sa.String(length=255), nullable=False),
-            sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")),
-            sa.Column("updated_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("failed_login_attempts", sa.Integer(), nullable=False, server_default="0"),
-            sa.Column("locked_until", sa.DateTime(), nullable=True),
+            sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True),
             sa.UniqueConstraint("username"),
         )
         op.create_index("ix_users_username", "users", ["username"], unique=False)
@@ -44,9 +44,9 @@ def upgrade() -> None:
             sa.Column("progress_seconds", sa.Float(), nullable=False),
             sa.Column("duration", sa.Float(), nullable=False),
             sa.Column("completed", sa.Boolean(), nullable=False, server_default="0"),
-            sa.Column("client_updated_at", sa.DateTime(), nullable=True),
-            sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")),
-            sa.Column("updated_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("client_updated_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         )
         op.create_index("ix_playback_progress_user_id", "playback_progress", ["user_id"], unique=False)
@@ -59,7 +59,7 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("user_id", sa.Integer(), nullable=False),
             sa.Column("site_host", sa.String(length=255), nullable=False),
-            sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         )
         op.create_index("ix_blocked_sites_user_id", "blocked_sites", ["user_id"], unique=False)
