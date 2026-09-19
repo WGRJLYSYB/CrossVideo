@@ -2,6 +2,11 @@
 
 CrossVideo Userscript 用于识别网页中的主要 HTML5 视频播放器，并将观看进度同步到用户配置的 CrossVideo API 服务。
 
+本目录提供两个版本：
+
+- `crossvideo.user.js`：桌面端版本，通过油猴菜单操作。
+- `crossvideo-mobile.user.js`：移动端版本，在网页右上角显示浮动按钮，适合手机和平板浏览器。
+
 ## Features
 
 - Sync HTML5 video progress across devices and supported websites
@@ -28,6 +33,12 @@ https://your-domain.example
 ```
 
 The script appends `/api/v1` automatically. Do not include `/api/v1` in the address field.
+
+## Mobile Version
+
+On mobile browsers, install `crossvideo-mobile.user.js` instead. It keeps the same account, API, progress sync, resume prompt, history search, pagination, deletion, and current-site filtering behavior, but replaces the desktop userscript menu with a floating play button in the top-right corner.
+
+Tap the floating button to open the history list when logged in, or the login/register window when logged out.
 
 ## Permissions
 
