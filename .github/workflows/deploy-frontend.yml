@@ -6,7 +6,7 @@ on:
       - main
       - master
     paths:
-      - 'frontend/**'
+      - "frontend/**"
   workflow_dispatch:
 
 concurrency:
@@ -18,13 +18,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
@@ -42,6 +42,6 @@ jobs:
           port: ${{ secrets.PORT }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-          source: 'frontend/dist/'
+          source: "frontend/dist/"
           target: ${{ secrets.FRONTEND_DIST_PATH }}
           strip_components: 2
