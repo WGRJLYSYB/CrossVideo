@@ -41,7 +41,13 @@ services:
       CROSSVIDEO_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crossvideo}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-crossvideo}
       CROSSVIDEO_CORS_ORIGINS: '["*"]'
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -63,7 +69,7 @@ services:
       CADDY_CERT_PRIVKEY: ${CADDY_CERT_PRIVKEY:?CADDY_CERT_PRIVKEY is required}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./admin:/srv/admin:ro
+      - ../frontend/dist:/srv/admin:ro
       - caddy-data:/data
       - caddy-config:/config
       - ${CADDY_CERT_DIR:?CADDY_CERT_DIR is required}:/etc/caddy/cert:ro
