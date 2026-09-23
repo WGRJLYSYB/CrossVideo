@@ -71,7 +71,7 @@
                 :href="row.clean_url"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-sm font-medium text-slate-200 hover:text-indigo-400 transition-colors inline-flex items-center gap-1 line-clamp-2"
+                class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors inline-flex items-center gap-1 line-clamp-2"
                 :title="row.title"
               >
                 <span>{{ row.title }}</span>
@@ -123,21 +123,21 @@
                 <el-button
                   size="small"
                   :type="row.is_favorite ? 'warning' : 'default'"
+                  plain
                   :icon="row.is_favorite ? StarFilled : Star"
                   circle
-                  class="!bg-slate-800 hover:!bg-slate-700 !border-slate-700"
                   @click="handleToggleFavorite(row)"
                 />
               </el-tooltip>
 
               <!-- Watch Later Button -->
-              <el-tooltip content="稍后观看" placement="top">
+              <el-tooltip :content="row.is_watch_later ? '已加入稍后观看' : '稍后观看'" placement="top">
                 <el-button
                   size="small"
-                  type="default"
-                  :icon="CollectionTag"
+                  :type="row.is_watch_later ? 'primary' : 'default'"
+                  plain
+                  :icon="row.is_watch_later ? VideoCameraFilled : VideoCamera"
                   circle
-                  class="!bg-slate-800 hover:!bg-slate-700 !border-slate-700"
                   @click="handleAddToWatchLater(row)"
                 />
               </el-tooltip>
@@ -160,7 +160,7 @@
       </el-table>
 
       <!-- Pagination Footer -->
-      <div class="p-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/30">
+      <div class="p-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="text-xs text-slate-400">
           共 <span class="font-semibold text-slate-200">{{ total }}</span> 条播放记录
         </div>
@@ -187,7 +187,8 @@ import {
   Delete,
   Star,
   StarFilled,
-  CollectionTag,
+  VideoCamera,
+  VideoCameraFilled,
   TopRight,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -259,6 +260,10 @@ async function handleToggleFavorite(row: HistoryItem) {
 }
 
 async function handleAddToWatchLater(row: HistoryItem) {
+  if (row.is_watch_later) {
+    ElMessage.info('该视频已在稍后观看列表中')
+    return
+  }
   try {
     await addWatchLaterApi({
       clean_url: row.clean_url,
@@ -267,6 +272,7 @@ async function handleAddToWatchLater(row: HistoryItem) {
       duration: row.duration,
       progress_seconds: row.progress_seconds,
     })
+    row.is_watch_later = true
     ElMessage.success('已添加到稍后观看')
     authStore.fetchProfile()
   } catch {

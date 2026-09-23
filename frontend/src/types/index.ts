@@ -17,6 +17,7 @@ export interface HistoryItem {
   completed: boolean
   updated_at: string | null
   is_favorite: boolean
+  is_watch_later: boolean
 }
 
 export interface FavoriteItem {
@@ -27,6 +28,7 @@ export interface FavoriteItem {
   duration: number
   progress_seconds: number
   created_at: string | null
+  is_watch_later: boolean
 }
 
 export interface WatchLaterItem {

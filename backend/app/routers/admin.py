@@ -25,7 +25,7 @@ from ..schemas import (
     WatchLaterListResponse,
 )
 
-router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 def as_utc(value: datetime | None) -> datetime | None:
@@ -137,7 +137,7 @@ def list_history(
 ) -> AdminHistoryListResponse:
     base_query = select(PlaybackProgress).where(PlaybackProgress.user_id == user.id)
     if site_host and site_host.strip():
-        base_query = base_query.where(PlaybackProgress.site_host == site_host.strip().lower())
+        base_query = base_query.where(PlaybackProgress.site_host.ilike(f"%{site_host.strip().lower()}%"))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         base_query = base_query.where(PlaybackProgress.title.ilike(pattern) | PlaybackProgress.clean_url.ilike(pattern))
@@ -151,12 +151,20 @@ def list_history(
 
     # Determine favorite status for these items
     fav_hashes = set()
+    wl_hashes = set()
     if items:
         url_hashes = [i.url_hash for i in items]
         fav_hashes = set(
             db.scalars(
                 select(Favorite.url_hash).where(
                     Favorite.user_id == user.id, Favorite.url_hash.in_(url_hashes)
+                )
+            ).all()
+        )
+        wl_hashes = set(
+            db.scalars(
+                select(WatchLater.url_hash).where(
+                    WatchLater.user_id == user.id, WatchLater.url_hash.in_(url_hashes)
                 )
             ).all()
         )
@@ -176,6 +184,7 @@ def list_history(
                 completed=item.completed,
                 updated_at=as_utc(item.updated_at),
                 is_favorite=item.url_hash in fav_hashes,
+                is_watch_later=item.url_hash in wl_hashes,
             )
             for item in items
         ],
@@ -230,6 +239,18 @@ def list_favorites(
         .limit(page_size)
     ).all()
 
+    # Determine watch later status for these favorite items
+    wl_hashes = set()
+    if items:
+        url_hashes = [i.url_hash for i in items]
+        wl_hashes = set(
+            db.scalars(
+                select(WatchLater.url_hash).where(
+                    WatchLater.user_id == user.id, WatchLater.url_hash.in_(url_hashes)
+                )
+            ).all()
+        )
+
     return FavoriteListResponse(
         total=total,
         page=page,
@@ -243,6 +264,7 @@ def list_favorites(
                 duration=item.duration,
                 progress_seconds=item.progress_seconds,
                 created_at=as_utc(item.created_at),
+                is_watch_later=item.url_hash in wl_hashes,
             )
             for item in items
         ],

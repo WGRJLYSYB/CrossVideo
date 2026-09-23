@@ -89,6 +89,7 @@ class AdminHistoryItem(BaseModel):
     completed: bool
     updated_at: datetime | None = None
     is_favorite: bool = False
+    is_watch_later: bool = False
 
 
 class AdminHistoryListResponse(BaseModel):
@@ -114,6 +115,7 @@ class FavoriteItem(BaseModel):
     duration: float
     progress_seconds: float
     created_at: datetime | None = None
+    is_watch_later: bool = False
 
 
 class FavoriteListResponse(BaseModel):

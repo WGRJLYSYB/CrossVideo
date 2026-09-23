@@ -11,8 +11,13 @@ import './assets/main.css'
 import App from './App.vue'
 import router from './router'
 
-// Apply dark class to html
-document.documentElement.classList.add('dark')
+// Apply theme from localStorage (default: dark)
+const savedTheme = localStorage.getItem('crossvideo_theme') || 'dark'
+if (savedTheme === 'dark') {
+  document.documentElement.classList.add('dark')
+} else {
+  document.documentElement.classList.remove('dark')
+}
 
 const app = createApp(App)
 const pinia = createPinia()

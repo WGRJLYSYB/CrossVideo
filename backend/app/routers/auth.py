@@ -9,7 +9,7 @@ from ..db import get_db
 from ..models import User
 from ..schemas import LoginRequest, RegisterRequest, TokenResponse
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def as_utc(value: datetime | None) -> datetime | None:

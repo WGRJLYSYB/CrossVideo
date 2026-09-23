@@ -2,17 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Dark theme (default) ─── */
 :root {
   color-scheme: dark;
+  --bg-body: #090d16;
+  --bg-sidebar: rgba(15, 23, 42, 0.8);
+  --bg-glass: rgba(15, 23, 42, 0.75);
+  --bg-glass-card: rgba(15, 23, 42, 0.6);
+  --bg-header: rgba(15, 23, 42, 0.4);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-card: rgba(255, 255, 255, 0.06);
+  --scrollbar-track: #0b1120;
+  --scrollbar-thumb: #1e293b;
+  --scrollbar-thumb-hover: #334155;
+}
+
+/* ─── Light theme ─── */
+html:not(.dark) {
+  color-scheme: light;
+  --bg-body: #f1f5f9;
+  --bg-sidebar: rgba(255, 255, 255, 0.9);
+  --bg-glass: rgba(255, 255, 255, 0.80);
+  --bg-glass-card: rgba(255, 255, 255, 0.65);
+  --bg-header: rgba(248, 250, 252, 0.85);
+  --border-glass: rgba(0, 0, 0, 0.08);
+  --border-glass-card: rgba(0, 0, 0, 0.06);
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #090d16;
+  background-color: var(--bg-body);
   color: #f1f5f9;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.2s ease;
+}
+
+html:not(.dark) body {
+  color: #1e293b;
 }
 
 /* Custom modern scrollbars */
@@ -22,16 +53,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b1120;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Element Plus Dark Adjustments */
@@ -49,7 +80,22 @@ html.dark {
   --el-fill-color-blank: #0f172a;
 }
 
-.el-table {
+/* Element Plus Light Adjustments */
+html:not(.dark) {
+  --el-color-primary: #6366f1;
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-dark-2: #4f46e5;
+  --el-bg-color: #ffffff;
+  --el-bg-color-overlay: #f8fafc;
+  --el-text-color-primary: #1e293b;
+  --el-text-color-regular: #475569;
+  --el-border-color: #e2e8f0;
+  --el-border-color-light: #e2e8f0;
+  --el-border-color-lighter: #f1f5f9;
+  --el-fill-color-blank: #ffffff;
+}
+
+html.dark .el-table {
   --el-table-bg-color: transparent !important;
   --el-table-tr-bg-color: transparent !important;
   --el-table-header-bg-color: rgba(15, 23, 42, 0.7) !important;
@@ -57,18 +103,26 @@ html.dark {
   --el-table-row-hover-bg-color: rgba(30, 41, 59, 0.4) !important;
 }
 
+html:not(.dark) .el-table {
+  --el-table-bg-color: transparent !important;
+  --el-table-tr-bg-color: transparent !important;
+  --el-table-header-bg-color: rgba(241, 245, 249, 0.8) !important;
+  --el-table-border-color: #e2e8f0 !important;
+  --el-table-row-hover-bg-color: rgba(226, 232, 240, 0.5) !important;
+}
+
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
 }
 
 .glass-card {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-glass-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-glass-card);
 }
 
 .glow-indigo {

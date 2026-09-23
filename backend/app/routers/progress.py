@@ -9,7 +9,7 @@ from ..db import get_db
 from ..models import BlockedSite, PlaybackProgress, User
 from ..schemas import ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
 
-router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
+router = APIRouter(prefix="/progress", tags=["progress"])
 
 
 def as_utc(value: datetime | None) -> datetime | None:
@@ -60,7 +60,7 @@ def query_progress(url_hash: str = Query(min_length=64, max_length=64, pattern=r
 def list_progress(search: str | None = Query(default=None, max_length=200), site_host: str | None = Query(default=None, max_length=255), page: int = Query(default=1, ge=1), page_size: int = Query(default=10, ge=1, le=100), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ProgressListResponse:
     base_query = select(PlaybackProgress).where(PlaybackProgress.user_id == user.id)
     if site_host and site_host.strip():
-        base_query = base_query.where(PlaybackProgress.site_host == site_host.strip().lower())
+        base_query = base_query.where(PlaybackProgress.site_host.ilike(f"%{site_host.strip().lower()}%"))
     if search and search.strip():
         search_pattern = f"%{search.strip()}%"
         base_query = base_query.where(PlaybackProgress.title.ilike(search_pattern) | PlaybackProgress.clean_url.ilike(search_pattern))

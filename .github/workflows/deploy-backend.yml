@@ -1,21 +1,23 @@
-name: Deploy to Server
+name: Deploy Backend
 
 on:
   push:
     branches:
       - main
       - master
+    paths:
+      - 'backend/**'
   workflow_dispatch:
 
 concurrency:
-  group: production-deploy
+  group: production-deploy-backend
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     steps:
-      - name: Deploy over SSH
+      - name: Deploy Backend over SSH
         uses: appleboy/ssh-action@v1.2.2
         timeout-minutes: 15
         with:

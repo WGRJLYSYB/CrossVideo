@@ -22,9 +22,9 @@ app = FastAPI(
     openapi_url=None,
 )
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.include_router(auth.router)
-app.include_router(progress.router)
-app.include_router(admin.router)
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(progress.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 
 
 @app.get("/health")
