@@ -44,4 +44,9 @@ htmlcov/
 # Build artifacts
 build/
 dist/
+out/
 *.whl
+
+# node包
+node_modules/
+.yarn/

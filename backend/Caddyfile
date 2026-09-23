@@ -10,8 +10,14 @@
         reverse_proxy api:8000
     }
 
-    handle {
+    handle_path /admin* {
         root * /srv/admin
+        try_files {path} /index.html
         file_server
+    }
+
+    # Reserved for future landing / promo page
+    handle {
+        respond "CrossVideo - Coming Soon" 200
     }
 }

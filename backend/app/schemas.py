@@ -66,3 +66,85 @@ class ProgressListResponse(BaseModel):
     page: int
     page_size: int
     items: list[ProgressItem]
+
+
+# --- Admin Dashboard Schemas ---
+
+class AdminUserInfoResponse(BaseModel):
+    id: int
+    username: str
+    created_at: datetime | None = None
+    history_count: int = 0
+    favorites_count: int = 0
+    watch_later_count: int = 0
+
+
+class AdminHistoryItem(BaseModel):
+    id: int
+    site_host: str | None = None
+    clean_url: str
+    title: str
+    progress_seconds: float
+    duration: float
+    completed: bool
+    updated_at: datetime | None = None
+    is_favorite: bool = False
+
+
+class AdminHistoryListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[AdminHistoryItem]
+
+
+class FavoriteCreateRequest(BaseModel):
+    clean_url: str = Field(min_length=1, max_length=4096)
+    title: str = Field(min_length=1, max_length=1000)
+    site_host: str | None = Field(default=None, max_length=255)
+    duration: float = Field(default=0.0, ge=0)
+    progress_seconds: float = Field(default=0.0, ge=0)
+
+
+class FavoriteItem(BaseModel):
+    id: int
+    site_host: str | None = None
+    clean_url: str
+    title: str
+    duration: float
+    progress_seconds: float
+    created_at: datetime | None = None
+
+
+class FavoriteListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[FavoriteItem]
+
+
+class WatchLaterCreateRequest(BaseModel):
+    clean_url: str = Field(min_length=1, max_length=4096)
+    title: str = Field(min_length=1, max_length=1000)
+    site_host: str | None = Field(default=None, max_length=255)
+    duration: float = Field(default=0.0, ge=0)
+    progress_seconds: float = Field(default=0.0, ge=0)
+
+
+class WatchLaterItem(BaseModel):
+    id: int
+    site_host: str | None = None
+    clean_url: str
+    title: str
+    duration: float
+    progress_seconds: float
+    created_at: datetime | None = None
+    is_favorite: bool = False
+
+
+class WatchLaterListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[WatchLaterItem]
+
