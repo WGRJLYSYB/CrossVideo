@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.1
+// @version      0.1.2
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
@@ -49,7 +49,7 @@
         .cv-mobile-filter { display: flex; align-items: center; gap: 8px; color: #61706d; }
         .cv-mobile-list { height: 45vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
         .cv-mobile-item { display: flex; align-items: flex-start; gap: 7px; padding: 12px 3px; border-bottom: 1px solid #d8d2c4; cursor: pointer; }
-        .cv-mobile-item:active { background: rgba(179,74,43,.08); }
+        .cv-mobile-item:active:not(:has(.cv-mobile-button:active)) { background: rgba(179,74,43,.08); }
         .cv-mobile-main { min-width: 0; flex: 1; }
         .cv-mobile-main a { color: #b34a2b; font-weight: 650; text-decoration: none; }
         .cv-mobile-meta { margin-top: 4px; color: #61706d; font-size: 12px; }
@@ -137,9 +137,15 @@
         expiry = setTimeout(dismiss, 6000);
         root.appendChild(toast);
     };
-    const closePanel = () => root.querySelector('.cv-mobile-overlay')?.remove();
+    const closePanel = () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        root.querySelector('.cv-mobile-overlay')?.remove();
+    }
     const openPanel = (html, onReady) => {
         closePanel();
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
         root.insertAdjacentHTML('beforeend', `<div class="cv-mobile-overlay"><section class="cv-mobile-card"><button class="cv-mobile-close" type="button">×</button>${html}</section></div>`);
         const overlay = root.querySelector('.cv-mobile-overlay');
         root.querySelector('.cv-mobile-close').onclick = closePanel;
@@ -257,7 +263,7 @@
     const fab = document.createElement('button');
     fab.className = 'cv-mobile-fab';
     fab.type = 'button';
-    fab.textContent = '☷';
+    fab.textContent = '📽️';
     fab.setAttribute('aria-label', '打开 CrossVideo 菜单');
     fab.title = 'CrossVideo';
     fab.onclick = () => token() ? showHistory() : showAuth();
