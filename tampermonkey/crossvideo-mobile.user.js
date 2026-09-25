@@ -29,7 +29,7 @@
     const css = `
         #crossvideo-mobile-root { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18212b; }
         #crossvideo-mobile-root * { box-sizing: border-box; }
-        .cv-mobile-fab { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 48px; height: 48px; border: 0; border-radius: 50%; background: #b34a2b; color: #fff; box-shadow: 0 5px 18px rgba(0,0,0,.28); font-size: 22px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+        .cv-mobile-fab { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 48px; height: 48px; border: 0; border-radius: 50%; background: #FDF6E3; color: #fff; box-shadow: 0 5px 18px rgba(0,0,0,.28); font-size: 22px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
         .cv-mobile-fab:active { transform: scale(.94); }
         .cv-mobile-overlay { position: fixed; inset: 0; display: grid; align-items: start; justify-items: center; padding: max(76px, calc(env(safe-area-inset-top) + 64px)) 12px 20px; background: rgba(12,18,24,.62); pointer-events: auto; overflow-y: auto; }
         .cv-mobile-card { width: min(460px, 100%); max-height: 82vh; overflow: hidden; padding: 20px; background: #f6f4ed; border: 1px solid #d8d2c4; border-radius: 13px; box-shadow: 0 18px 55px rgba(0,0,0,.32); }
@@ -49,7 +49,7 @@
         .cv-mobile-filter { display: flex; align-items: center; gap: 8px; color: #61706d; }
         .cv-mobile-list { height: 45vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
         .cv-mobile-item { display: flex; align-items: flex-start; gap: 7px; padding: 12px 3px; border-bottom: 1px solid #d8d2c4; cursor: pointer; }
-        .cv-mobile-item:active:not(:has(.cv-mobile-button:active)) { background: rgba(179,74,43,.08); }
+        .cv-mobile-item:active:not(:has(.cv-mobile-delete:active)) { background: rgba(179,74,43,.08); }
         .cv-mobile-main { min-width: 0; flex: 1; }
         .cv-mobile-main a { color: #b34a2b; font-weight: 650; text-decoration: none; }
         .cv-mobile-meta { margin-top: 4px; color: #61706d; font-size: 12px; }
