@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.2
+// @version      0.1.3
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
@@ -237,6 +237,15 @@
             await request('POST', '/progress/sync', { site_host: siteHost(), url_hash: session.urlHash, clean_url: session.cleanUrl, title: document.title || session.cleanUrl, progress_seconds: session.video.currentTime, duration: session.video.duration, client_updated_at: new Date().toISOString() });
         } catch (_) { /* Ignore transient mobile network failures. */ }
     };
+
+    const query = async (session) => {
+        if (!session || !token()) return;
+        try {
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95) showResumeToast(result.progress_seconds, session.video);
+        } catch (_) { /* Ignore unavailable resume queries on mobile networks. */ }
+    };
+    
     const candidate = (video) => video.getBoundingClientRect().width / innerWidth > .5 && Number.isFinite(video.duration) && video.duration > 180;
     const scan = async () => {
         const video = [...document.querySelectorAll('video')].filter(candidate).sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0];
@@ -251,13 +260,9 @@
         video.addEventListener('timeupdate', () => { if (!video.paused) played += .25; if (played >= 10) session.qualified = true; });
         video.addEventListener('pause', () => sync(session));
         video.addEventListener('ended', () => sync(session));
+        video.addEventListener('play', () => query(session));
         state.timer = setInterval(() => { if (!video.paused) sync(session); }, 15000);
-        if (token()) {
-            try {
-                const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
-                if (result.found && result.progress_seconds > 0 && result.progress_seconds < video.duration * 0.95) showResumeToast(result.progress_seconds, video);
-            } catch (_) { /* Ignore unavailable resume queries on mobile networks. */ }
-        }
+        await query(session);
     };
 
     const fab = document.createElement('button');

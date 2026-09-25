@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.0
+// @version      0.1.1
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
@@ -216,6 +216,13 @@
         } catch (_) { /* A later timer or pause event retries the update. */ }
     };
 
+    const query = async (session) => {
+        try {
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95) showToast(result.progress_seconds, session.video.duration, session.video, session);
+        } catch (_) { /* Anonymous or offline pages remain usable. */ }
+    }
+
     const startSession = async (video) => {
         if (state.session?.video === video && state.session.routeUrl === location.href) return;
         if (state.timer) window.clearInterval(state.timer);
@@ -238,6 +245,7 @@
         });
         video.addEventListener('pause', () => sync(session));
         video.addEventListener('ended', () => sync(session));
+        video.addEventListener('play', () => query(session));
         document.addEventListener('visibilitychange', updateTitle);
         const titleObserver = new MutationObserver(updateTitle);
         const titleElement = document.querySelector('title');
@@ -250,10 +258,7 @@
             if (!session.video.paused) sync(session);
         }, 15000);
         if (!token() || !isCandidate(video)) return;
-        try {
-            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
-            if (result.found && result.progress_seconds > 0 && result.progress_seconds < video.duration * 0.95) showToast(result.progress_seconds, video.duration, video, session);
-        } catch (_) { /* Anonymous or offline pages remain usable. */ }
+        await query(session);
     };
 
     const scan = () => {
@@ -262,9 +267,15 @@
     };
 
     const showModal = (content, cardClass = '') => {
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
         root.innerHTML = `<div class="cv-overlay"><section class="cv-card ${cardClass}"><button class="cv-close" aria-label="关闭">×</button>${content}</section></div>`;
         const overlay = root.querySelector('.cv-overlay');
-        const close = () => { root.innerHTML = ''; };
+        const close = () => {
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            root.innerHTML = '';
+        };
         root.querySelector('.cv-close').onclick = close;
         overlay.onclick = (event) => { if (event.target === overlay) close(); };
     };
