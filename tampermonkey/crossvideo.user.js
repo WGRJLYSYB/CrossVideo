@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.1
+// @version      0.1.2
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
@@ -219,7 +219,7 @@
     const query = async (session) => {
         try {
             const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
-            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95) showToast(result.progress_seconds, session.video.duration, session.video, session);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showToast(result.progress_seconds, session.video.duration, session.video, session);
         } catch (_) { /* Anonymous or offline pages remain usable. */ }
     }
 

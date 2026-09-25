@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.3
+// @version      0.1.4
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
@@ -242,10 +242,10 @@
         if (!session || !token()) return;
         try {
             const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
-            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95) showResumeToast(result.progress_seconds, session.video);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showResumeToast(result.progress_seconds, session.video);
         } catch (_) { /* Ignore unavailable resume queries on mobile networks. */ }
     };
-    
+
     const candidate = (video) => video.getBoundingClientRect().width / innerWidth > .5 && Number.isFinite(video.duration) && video.duration > 180;
     const scan = async () => {
         const video = [...document.querySelectorAll('video')].filter(candidate).sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0];
