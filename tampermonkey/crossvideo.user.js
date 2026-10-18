@@ -65,6 +65,7 @@
         .cv-history-item:hover { background: rgba(179, 74, 43, .07); }
         .cv-history-main { min-width: 0; flex: 1; }
         .cv-history-item a { color: #b34a2b; font-weight: 650; text-decoration: none; }
+        .cv-history-completed { display: inline-block; margin-left: 6px; padding: 1px 5px; font-size: 11px; color: #fff; background: #67C23A; border-radius: 4px; }
         .cv-delete { flex: 0 0 auto; border: 0; background: transparent; color: #a12f2f; cursor: pointer; font-size: 16px; padding: 2px 5px; }
         .cv-history-meta { color: #61706d; font-size: 12px; margin-top: 4px; }
         .cv-close { float: right; border: 0; background: transparent; font-size: 22px; cursor: pointer; color: #61706d; }
@@ -348,7 +349,7 @@
                 const siteQuery = siteOnly.checked ? `&site_host=${encodeURIComponent(siteHost())}` : '';
                 const result = await request('GET', `/progress/list?page=${targetPage}&page_size=${pageSize}&search=${encodeURIComponent(search)}${siteQuery}`);
                 total = result.total;
-                const items = result.items.map((item) => `<article class="cv-history-item" data-id="${item.id}" data-url="${escapeHtml(item.clean_url)}"><div class="cv-history-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}</a><div class="cv-history-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-delete" type="button" aria-label="删除记录">🗑</button></article>`).join('');
+                const items = result.items.map((item) => `<article class="cv-history-item" data-id="${item.id}" data-url="${escapeHtml(item.clean_url)}"><div class="cv-history-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}<span class="cv-history-completed" style="display: ${item.completed ? 'inline-block' : 'none'}">已看完</span></a><div class="cv-history-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-delete" type="button" aria-label="删除记录">🗑</button></article>`).join('');
                 list.innerHTML = items || '<p class="cv-history-empty">没有找到匹配的播放记录</p>';
                 list.querySelectorAll('.cv-history-item').forEach((item) => {
                     item.onclick = (event) => {

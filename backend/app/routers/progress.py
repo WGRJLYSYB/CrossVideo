@@ -66,7 +66,7 @@ def list_progress(search: str | None = Query(default=None, max_length=200), site
         base_query = base_query.where(PlaybackProgress.title.ilike(search_pattern) | PlaybackProgress.clean_url.ilike(search_pattern))
     total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
     items = db.scalars(base_query.order_by(PlaybackProgress.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return ProgressListResponse(total=total, page=page, page_size=page_size, items=[ProgressItem(id=item.id, clean_url=item.clean_url, title=item.title, progress_seconds=0 if item.completed else item.progress_seconds, duration=item.duration, updated_at=as_utc(item.updated_at)) for item in items])
+    return ProgressListResponse(total=total, page=page, page_size=page_size, items=[ProgressItem(id=item.id, clean_url=item.clean_url, title=item.title, progress_seconds=0 if item.completed else item.progress_seconds, duration=item.duration, updated_at=as_utc(item.updated_at), completed=item.completed) for item in items])
 
 
 @router.delete("/records/{progress_id}")

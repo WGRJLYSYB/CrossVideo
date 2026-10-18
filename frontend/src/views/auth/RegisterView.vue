@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen relative flex items-center justify-center bg-slate-950 px-4 overflow-hidden">
+  <div class="min-h-screen relative flex items-center justify-center px-4 overflow-hidden" :class="isDark ? 'bg-slate-950' : 'bg-slate-100'">
     <!-- Ambient glowing backdrop orbs -->
     <div class="absolute top-1/4 -right-20 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute bottom-1/4 -left-20 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -10,13 +10,13 @@
         <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 shadow-lg shadow-indigo-500/30 mb-4">
           <el-icon :size="28" class="text-white"><VideoPlay /></el-icon>
         </div>
-        <h1 class="text-2xl font-bold text-white tracking-tight font-['Outfit']">CrossVideo 管理后台</h1>
+        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">CrossVideo 管理后台</h1>
         <p class="text-sm text-slate-400 mt-1">创建新账号开启多端进度同步</p>
       </div>
 
       <!-- Register Card -->
       <div class="glass-panel rounded-2xl p-8 shadow-2xl border border-slate-800/80">
-        <h2 class="text-lg font-semibold text-slate-200 mb-6">注册新用户</h2>
+        <h2 class="text-lg font-semibold mb-6" :class="isDark ? 'text-slate-200' : 'text-slate-600'">注册新用户</h2>
 
         <el-form
           ref="formRef"
@@ -95,6 +95,8 @@ import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+
+const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const router = useRouter()
 const authStore = useAuthStore()

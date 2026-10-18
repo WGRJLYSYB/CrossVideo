@@ -52,6 +52,7 @@
         .cv-mobile-item:active:not(:has(.cv-mobile-delete:active)) { background: rgba(179,74,43,.08); }
         .cv-mobile-main { min-width: 0; flex: 1; }
         .cv-mobile-main a { color: #b34a2b; font-weight: 650; text-decoration: none; }
+        .cv-mobile-completed { display: inline-block; margin-left: 6px; padding: 1px 5px; font-size: 11px; color: #fff; background: #67C23A; border-radius: 4px; }
         .cv-mobile-meta { margin-top: 4px; color: #61706d; font-size: 12px; }
         .cv-mobile-delete { flex: 0 0 auto; border: 0; background: transparent; color: #a12f2f; padding: 3px 5px; font-size: 17px; }
         .cv-mobile-pages { display: flex; justify-content: center; gap: 12px; margin-top: 12px; }
@@ -213,7 +214,7 @@
                     const filter = siteOnly.checked ? `&site_host=${encodeURIComponent(siteHost())}` : '';
                     const result = await request('GET', `/progress/list?page=${target}&page_size=${pageSize}&search=${encodeURIComponent(search)}${filter}`);
                     total = result.total;
-                    list.innerHTML = result.items.map((item) => `<article class="cv-mobile-item" data-url="${escapeHtml(item.clean_url)}" data-id="${item.id}"><div class="cv-mobile-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}</a><div class="cv-mobile-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-mobile-delete">🗑</button></article>`).join('') || '<p>没有找到匹配的播放记录</p>';
+                    list.innerHTML = result.items.map((item) => `<article class="cv-mobile-item" data-url="${escapeHtml(item.clean_url)}" data-id="${item.id}"><div class="cv-mobile-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}<span class="cv-mobile-completed" style="display: ${item.completed ? 'inline-block' : 'none'}">已看完</span></a><div class="cv-mobile-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-mobile-delete">🗑</button></article>`).join('') || '<p>没有找到匹配的播放记录</p>';
                     list.querySelectorAll('.cv-mobile-item').forEach((item) => {
                         item.onclick = (event) => { if (!event.target.closest('button') && !event.target.closest('a')) location.href = item.dataset.url; };
                         item.querySelector('button').onclick = async (event) => { event.stopPropagation(); await request('DELETE', `/progress/records/${item.dataset.id}`); item.remove(); notice('记录已删除'); };

@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen relative flex items-center justify-center bg-slate-950 px-4 overflow-hidden">
+  <div class="min-h-screen relative flex items-center justify-center px-4 overflow-hidden" :class="isDark ? 'bg-slate-950' : 'bg-slate-100'">
     <!-- Ambient glowing backdrop orbs -->
     <div class="absolute top-1/4 -left-20 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute bottom-1/4 -right-20 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none">
@@ -14,13 +14,13 @@
             <VideoPlay />
           </el-icon>
         </div>
-        <h1 class="text-2xl font-bold text-white tracking-tight font-['Outfit']">CrossVideo 管理后台</h1>
+        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">CrossVideo 管理后台</h1>
         <p class="text-sm text-slate-400 mt-1">全平台视频观看进度同步与管理</p>
       </div>
 
       <!-- Login Card -->
       <div class="glass-panel rounded-2xl p-8 shadow-2xl border border-slate-800/80">
-        <h2 class="text-lg font-semibold text-slate-200 mb-6">账号登录</h2>
+        <h2 class="text-lg font-semibold mb-6" :class="isDark ? 'text-slate-200' : 'text-slate-600'">账号登录</h2>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleLogin">
           <el-form-item label="用户名" prop="username">
@@ -59,6 +59,8 @@ import { useRouter, useRoute } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+
+const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const router = useRouter()
 const route = useRoute()

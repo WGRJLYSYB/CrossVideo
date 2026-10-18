@@ -6,7 +6,30 @@
     tls /etc/caddy/cert/{$CADDY_CERT_FULLCHAIN} /etc/caddy/cert/{$CADDY_CERT_PRIVKEY}
     encode gzip
 
+    # ========== 安全响应头（就是前面聊的防点击劫持等）==========
+    header {
+        # 防点击劫持，禁止iframe嵌入
+        X-Frame-Options "DENY"
+        # 禁止MIME嗅探，防止类型混淆攻击
+        X-Content-Type-Options "nosniff"
+        # HSTS 强制HTTPS（长期）
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # 推荐CSP，现代XSS防护，替代过时X-XSS-Protection
+        Content-Security-Policy "default-src 'self'; connect-src 'self';"
+        # 引用策略
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # 关闭无用设备权限
+        Permissions-Policy "geolocation=(),camera=(),microphone=()"
+        # 移除 Caddy 自身的 Server 标识（部分版本 Caddy 会带）
+        -Server
+    }
+
     handle /api/* {
+        # 删除后端(uvicorn)返回的Server头，防止泄露uvicorn
+        header_down -Server
+        # 删除Via头，隐藏代理信息
+        header_down -Via
+        # 代理到业务应用容器
         reverse_proxy api:8000
     }
 

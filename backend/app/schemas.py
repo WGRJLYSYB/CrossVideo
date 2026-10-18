@@ -59,6 +59,7 @@ class ProgressItem(BaseModel):
     progress_seconds: float
     duration: float
     updated_at: datetime
+    completed: bool
 
 
 class ProgressListResponse(BaseModel):
