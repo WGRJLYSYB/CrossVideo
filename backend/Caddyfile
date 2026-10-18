@@ -25,12 +25,15 @@
     }
 
     handle /api/* {
-        # 删除后端(uvicorn)返回的Server头，防止泄露uvicorn
-        header_down -Server
-        # 删除Via头，隐藏代理信息
-        header_down -Via
         # 代理到业务应用容器
-        reverse_proxy api:8000
+        reverse_proxy api:8000 {
+            # 删除后端(uvicorn)返回的Server头，防止泄露uvicorn
+            header_down -Server
+            # 删除Via头，隐藏代理信息
+            header_down -Via
+        }
+        header -Server
+        header -Via
     }
 
     handle_path /admin* {
