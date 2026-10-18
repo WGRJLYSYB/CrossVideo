@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.2
+// @version      0.1.3
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       Gavin Newsom
 // @license      MIT
