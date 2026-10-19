@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.6
+// @version      0.1.7
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -70,7 +70,8 @@ See LICENSE file in repository root for full license text.
         .cv-mobile-page:disabled { opacity: .35; }
         .cv-mobile-notice { position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 9px 14px; border-radius: 8px; background: rgba(24,33,43,.92); color: #fff; box-shadow: 0 5px 18px rgba(0,0,0,.25); pointer-events: auto; }
         .cv-mobile-toast { position: fixed; width: min(310px, calc(100vw - 30px)); padding: 11px; background: rgba(246,244,237,.92); border-left: 3px solid #b34a2b; border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.24); pointer-events: auto; }
-        .cv-mobile-toast strong { display: block; margin-bottom: 9px; }
+        .cv-mobile-toast div { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+        .cv-mobile-toast strong { display: block; margin-bottom: 9px; text-align: center; }
     `;
     const style = document.createElement('style');
     style.textContent = css;
@@ -129,7 +130,7 @@ See LICENSE file in repository root for full license text.
         removeToast();
         const toast = document.createElement('div');
         toast.className = 'cv-mobile-toast';
-        toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button>`;
+        toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
         const position = () => {
             const bounds = video.getBoundingClientRect();
             toast.style.left = `${bounds.left + bounds.width / 2}px`;

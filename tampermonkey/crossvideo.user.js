@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.4
+// @version      0.1.5
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -59,7 +59,8 @@ See LICENSE file in repository root for full license text.
         .cv-button.secondary { background: #ddd7ca; color: #18212b; }
         .cv-error { color: #a12f2f; min-height: 21px; margin-top: 8px; }
         .cv-toast { position: fixed; width: min(300px, calc(100vw - 36px)); padding: 11px; background: rgba(246, 244, 237, .9); border-left: 3px solid #b34a2b; border-radius: 7px; box-shadow: 0 6px 22px rgba(0,0,0,.22); }
-        .cv-toast strong { display: block; margin-bottom: 10px; }
+        .cv-toast div { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+        .cv-toast strong { display: block; margin-bottom: 10px; text-align: center; }
         .cv-history-toolbar { display: grid; gap: 10px; margin-bottom: 14px; }
         .cv-history-filter { display: flex; align-items: center; gap: 8px; color: #61706d; font-size: 13px; }
         .cv-search-wrap { position: relative; }
@@ -167,7 +168,7 @@ See LICENSE file in repository root for full license text.
         removeToast();
         const toast = document.createElement('div');
         toast.className = 'cv-toast';
-        toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button>`;
+        toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
         const positionToast = () => {
             const bounds = video.getBoundingClientRect();
             toast.style.left = `${bounds.left + bounds.width / 2}px`;
