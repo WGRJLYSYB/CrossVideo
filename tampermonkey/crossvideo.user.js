@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.7
+// @version      0.1.8
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -114,8 +114,10 @@ See LICENSE file in repository root for full license text.
                 let data;
                 try { data = JSON.parse(response.responseText || '{}'); } catch (_) { data = {}; }
                 if (response.status >= 200 && response.status < 300) resolve(data);
-                else if (response.status === 401) { GM_deleteValue(TOKEN_KEY); reject(new Error('未登录或登录已过期，请重新登录')); }
-                else reject(new Error(requestErrorMessage(data, response.status)));
+                else {
+                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); }
+                    reject(new Error(requestErrorMessage(data, response.status)));
+                }
             },
             onerror: () => reject(new Error('无法连接 CrossVideo 服务')),
         });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.9
+// @version      0.1.10
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -94,8 +94,10 @@ See LICENSE file in repository root for full license text.
                 let data = {};
                 try { data = JSON.parse(response.responseText || '{}'); } catch (_) { /* Ignore non-JSON errors. */ }
                 if (response.status >= 200 && response.status < 300) resolve(data);
-                else if (response.status === 401) { GM_deleteValue(TOKEN_KEY); reject(new Error('未登录或登录已过期，请重新登录')); }
-                else reject(new Error(Array.isArray(data.detail) ? data.detail.map((item) => item.msg).join('；') : data.detail || `请求失败（${response.status}）`));
+                else {
+                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); }
+                    reject(new Error(Array.isArray(data.detail) ? data.detail.map((item) => item.msg).join('；') : data.detail || `请求失败（${response.status}）`));
+                }
             },
             onerror: () => reject(new Error('无法连接 CrossVideo 服务')),
         });
