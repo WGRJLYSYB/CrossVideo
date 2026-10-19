@@ -1,3 +1,12 @@
+/*
+CrossVideo — Cross‑platform video playback progress synchronization tool
+Copyright (C) 2026 WGRJLYSYB
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License v3.0.
+See LICENSE file in repository root for full license text.
+*/
+
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { loginApi, registerApi, getProfileApi, type LoginParams, type RegisterParams } from '@/api/auth'

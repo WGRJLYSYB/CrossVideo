@@ -1,0 +1,25 @@
+{
+  "name": "crossvideo",
+  "version": "1.0.0",
+  "description": "跨平台视频观看进度同步工具，使用油猴脚本监听网页播放器，并通过 FastAPI 服务在不同设备和视频网站之间同步观看进度。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WGRJLYSYB/CrossVideo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/WGRJLYSYB/CrossVideo/issues"
+  },
+  "homepage": "https://github.com/WGRJLYSYB/CrossVideo#readme",
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

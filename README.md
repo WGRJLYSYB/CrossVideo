@@ -138,4 +138,19 @@ Docker Compose 使用宿主机目录挂载：
 
 ## 许可证
 
-MIT License
+本项目使用 **GNU Affero General Public License v3.0（AGPLv3）** 开源。
+
+简单说明：
+1. 你可以自由使用、修改、分发本项目代码。
+2. 如果**修改本项目后，部署在公网对外提供服务**，你必须向使用者公开修改后的完整源码。
+3. 通过API调用本后端的独立前端/油猴脚本，不受本协议约束，可保持闭源。
+
+[![AGPLv3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
+
+详见 [LICENSE](./LICENSE) 文件。
+
+## 免责声明
+
+* 本项目仅供学习交流使用，不得用于商业用途，如有侵权请联系删除
+* 用户使用本项目所产生的任何后果，需自行承担风险
+* 开发者不对使用本项目产生的任何直接或间接损失负责

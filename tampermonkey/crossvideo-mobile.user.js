@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.5
+// @version      0.1.6
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
-// @author       Gavin Newsom
-// @license      MIT
+// @author       WGRJLYSYB
+// @license      AGPL-3.0
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -12,6 +12,16 @@
 // @grant        GM_addValueChangeListener
 // @connect      *
 // ==/UserScript==
+
+/*
+CrossVideo — Cross‑platform video playback progress synchronization tool
+Copyright (C) 2026 WGRJLYSYB
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License v3.0.
+See LICENSE file in repository root for full license text.
+*/
+
 
 (() => {
     'use strict';
