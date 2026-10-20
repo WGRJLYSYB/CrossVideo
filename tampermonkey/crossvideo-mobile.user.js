@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.10
+// @version      0.1.11
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -161,7 +161,6 @@ See LICENSE file in repository root for full license text.
     const openPanel = (html, onReady) => {
         closePanel();
         document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
         root.insertAdjacentHTML('beforeend', `<div class="cv-mobile-overlay"><section class="cv-mobile-card"><button class="cv-mobile-close" type="button">×</button>${html}</section></div>`);
         const overlay = root.querySelector('.cv-mobile-overlay');
         root.querySelector('.cv-mobile-close').onclick = closePanel;

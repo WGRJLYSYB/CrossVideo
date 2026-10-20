@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.8
+// @version      0.1.9
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -284,7 +284,6 @@ See LICENSE file in repository root for full license text.
 
     const showModal = (content, cardClass = '') => {
         document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
         root.innerHTML = `<div class="cv-overlay"><section class="cv-card ${cardClass}"><button class="cv-close" aria-label="关闭">×</button>${content}</section></div>`;
         const overlay = root.querySelector('.cv-overlay');
         const close = () => {
