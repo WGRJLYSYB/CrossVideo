@@ -42,8 +42,11 @@
         file_server
     }
 
-    # Reserved for future landing / promo page
     handle {
-        respond "CrossVideo - Coming Soon" 200
+        root * /srv/official-website
+        rewrite * /404.html
+        file_server {
+            status 404
+        }
     }
 }

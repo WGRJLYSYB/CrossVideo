@@ -70,6 +70,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../frontend/dist:/srv/admin:ro
+      - ../official-website:/srv/official-website:ro
       - caddy-data:/data
       - caddy-config:/config
       - ${CADDY_CERT_DIR:?CADDY_CERT_DIR is required}:/etc/caddy/cert:ro
