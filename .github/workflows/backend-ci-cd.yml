@@ -68,7 +68,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           source: "backend/docker-compose.yml,backend/Caddyfile"
-          target: "${{ secrets.TARGET_DIR }}/backend/" 
+          target: "${{ secrets.TARGET_DIR }}" 
 
       # 2. 执行远端 SSH 命令：拉取新镜像、重启容器、清理旧镜像
       - name: Deploy Backend via SSH
