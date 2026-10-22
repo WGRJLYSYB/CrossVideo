@@ -6,49 +6,46 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname.startsWith("/api/")) {
+    if (!url.pathname.startsWith("/api/")) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    try {
       const backendPath = url.pathname + url.search;
 
-      // 构造转发请求，修正 Host 头，去掉浏览器特有的头
-      const backendUrl = new URL(env.BACKEND_URL + backendPath);
+      // 复制请求头，去掉浏览器特有的头
+      // 注意：不要手动设置 Host，运行时会根据 URL 自动设置
       const headers = new Headers(request.headers);
-      headers.set("Host", backendUrl.host);  // 把 Host 改成后端的域名
-      headers.delete("Origin");              // 去掉浏览器 Origin 头
-      headers.delete("Referer");             // 去掉浏览器 Referer 头
+      headers.delete("Origin");
+      headers.delete("Referer");
 
-      const backendRequest = new Request(backendUrl, {
+      const backendRequest = new Request(env.BACKEND_URL + backendPath, {
         method: request.method,
         headers: headers,
         body: request.body,
         redirect: "manual",
       });
 
-      try {
-        const response = await fetch(backendRequest);
+      const response = await fetch(backendRequest);
 
-        // 加上 CORS 响应头，让浏览器允许跨域读取
-        // 虽然 Worker 和前端同域，但显式设置更安全
-        const responseHeaders = new Headers(response.headers);
-        responseHeaders.set("Access-Control-Allow-Origin", url.origin);
-        responseHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        responseHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      // 透传后端响应，加上 CORS 头
+      const responseHeaders = new Headers(response.headers);
+      responseHeaders.set("Access-Control-Allow-Origin", url.origin);
 
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: responseHeaders,
-        });
-      } catch (error) {
-        return new Response(
-          JSON.stringify({ error: "Backend service unavailable" }),
-          {
-            status: 502,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    } catch (error) {
+      console.error("Proxy error:", error);
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+        {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
-
-    return new Response("Not Found", { status: 404 });
   },
 };
