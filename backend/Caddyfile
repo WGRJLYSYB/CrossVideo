@@ -37,7 +37,7 @@
         header -Via
     }
 
-    handle / {
+    handle {
         root * /srv/admin
         try_files {path} /index.html
         file_server

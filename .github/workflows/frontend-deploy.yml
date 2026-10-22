@@ -35,7 +35,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Deploy dist to server via SSH
+      - name: Clean old dist on server and Deploy via SSH
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
@@ -45,3 +45,4 @@ jobs:
           source: "frontend/dist/"
           target: ${{ secrets.FRONTEND_DIST_PATH }}
           strip_components: 2
+          rm: true
