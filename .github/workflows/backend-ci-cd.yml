@@ -40,7 +40,7 @@ jobs:
 
       # 2. 在 tags 中使用截断后的短哈希
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
