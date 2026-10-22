@@ -1,0 +1,95 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-cd
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # 阶段一：云端构建镜像并推送到 Docker Hub
+  # -------------------------------------------------------------
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1. 提取前 7 位 Git Commit 短哈希
+      - name: Extract short Git SHA
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 2. 在 tags 中使用截断后的短哈希
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:${{ steps.vars.outputs.sha_short }}
+
+  # -------------------------------------------------------------
+  # 阶段二：服务器部署（通过 needs 严格依赖阶段一的成功）
+  # -------------------------------------------------------------
+  deploy:
+    needs: build # 关键：只有 build 成功完成，才会执行这一步！
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code (Runner 临时获取)
+        uses: actions/checkout@v4
+
+      # 1. 精准传输：只把 backend 目录下的 docker-compose.yml 发送到服务器，不传源码！
+      - name: Copy docker-compose.yml to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "backend/docker-compose.yml,backend/Caddyfile"
+          target: "${{ secrets.TARGET_DIR }}/backend/" 
+
+      # 2. 执行远端 SSH 命令：拉取新镜像、重启容器、清理旧镜像
+      - name: Deploy Backend via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        timeout-minutes: 10
+        with:
+          host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ${{ secrets.TARGET_DIR }}/backend
+
+            # 拉取 Docker Hub 上最新构建好的镜像
+            docker compose pull api
+
+            # 启动或平滑拉起有变化的容器
+            docker compose up -d --remove-orphans
+
+            # 强制 Caddy 平滑加载最新的配置（零中断）
+            docker compose restart caddy || true
+
+            # 清理构建产生的悬空镜像与旧镜像
+            docker image prune -f

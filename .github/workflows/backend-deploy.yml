@@ -1,13 +1,13 @@
 name: Deploy Backend
 
-on:
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - 'backend/**'
-  workflow_dispatch:
+on: []    # 取消在服务器上构建的部署方式，采用直接拉取 Docker Hub 镜像的方式部署
+#   push:
+#     branches:
+#       - main
+#       - master
+#     paths:
+#       - 'backend/**'
+#   workflow_dispatch:
 
 concurrency:
   group: production-deploy-backend

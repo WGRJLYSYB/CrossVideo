@@ -29,7 +29,8 @@ services:
       retries: 10
 
   api:
-    build: .
+    image: johnpaulreed/crossvideo-backend:latest
+    # build: .
     restart: unless-stopped
     logging: *default-logging
     depends_on:
@@ -61,7 +62,6 @@ services:
         condition: service_healthy
     ports:
       - "443:443"
-      # - "80:80"
     environment:
       TZ: Asia/Shanghai
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
