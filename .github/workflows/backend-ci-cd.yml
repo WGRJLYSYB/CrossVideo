@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 1. 提取前 7 位 Git Commit 短哈希
       - name: Extract short Git SHA
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code (Runner 临时获取)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 1. 精准传输：只把 backend 目录下的 docker-compose.yml 发送到服务器，不传源码！
       - name: Copy docker-compose.yml to Server
