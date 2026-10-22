@@ -1,7 +1,3 @@
-// crossvideo Worker — /api/* 反向代理
-// 只有 /api/ 开头的请求会进入这个 Worker（通过 wrangler 中的 run_worker_first 配置）
-// 其他请求由 Cloudflare 直接返回静态资源，不经过 Worker
-
 interface Env {
   BACKEND_URL: string;
 }
@@ -12,11 +8,36 @@ export default {
 
     if (url.pathname.startsWith("/api/")) {
       const backendPath = url.pathname + url.search;
-      const backendRequest = new Request(env.BACKEND_URL + backendPath, request);
+
+      // 构造转发请求，修正 Host 头，去掉浏览器特有的头
+      const backendUrl = new URL(env.BACKEND_URL + backendPath);
+      const headers = new Headers(request.headers);
+      headers.set("Host", backendUrl.host);  // 把 Host 改成后端的域名
+      headers.delete("Origin");              // 去掉浏览器 Origin 头
+      headers.delete("Referer");             // 去掉浏览器 Referer 头
+
+      const backendRequest = new Request(backendUrl, {
+        method: request.method,
+        headers: headers,
+        body: request.body,
+        redirect: "manual",
+      });
 
       try {
         const response = await fetch(backendRequest);
-        return response;
+
+        // 加上 CORS 响应头，让浏览器允许跨域读取
+        // 虽然 Worker 和前端同域，但显式设置更安全
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.set("Access-Control-Allow-Origin", url.origin);
+        responseHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        responseHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
       } catch (error) {
         return new Response(
           JSON.stringify({ error: "Backend service unavailable" }),
