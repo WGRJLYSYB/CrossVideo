@@ -37,17 +37,23 @@
         header -Via
     }
 
-    handle_path /admin* {
+    handle / {
         root * /srv/admin
         try_files {path} /index.html
         file_server
     }
 
-    handle {
-        root * /srv/official-website
-        rewrite * /404.html
-        file_server {
-            status 404
-        }
-    }
+    # handle_path /admin* {
+    #     root * /srv/admin
+    #     try_files {path} /index.html
+    #     file_server
+    # }
+
+    # handle {
+    #     root * /srv/official-website
+    #     rewrite * /404.html
+    #     file_server {
+    #         status 404
+    #     }
+    # }
 }
