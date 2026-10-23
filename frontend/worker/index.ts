@@ -13,11 +13,18 @@ export default {
     try {
       const backendPath = url.pathname + url.search;
 
-      // 复制请求头，去掉浏览器特有的头
-      // 注意：不要手动设置 Host，运行时会根据 URL 自动设置
-      const headers = new Headers(request.headers);
-      headers.delete("Origin");
-      headers.delete("Referer");
+      // 逐个复制请求头，跳过 Host/Origin/Referer
+      // 不含 Host 时，运行时会根据 BACKEND_URL 自动设置正确的 Host
+      const headers = new Headers();
+      for (const [key, value] of request.headers) {
+        const lk = key.toLowerCase();
+        if (lk === "host" || lk === "origin" || lk === "referer") continue;
+        try {
+          headers.append(key, value);
+        } catch (e) {
+          // 跳过其他禁止设置的头
+        }
+      }
 
       const backendRequest = new Request(env.BACKEND_URL + backendPath, {
         method: request.method,
@@ -28,7 +35,6 @@ export default {
 
       const response = await fetch(backendRequest);
 
-      // 透传后端响应，加上 CORS 头
       const responseHeaders = new Headers(response.headers);
       responseHeaders.set("Access-Control-Allow-Origin", url.origin);
 
