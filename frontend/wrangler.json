@@ -1,12 +1,22 @@
 {
-  "name": "crossvideo",
-  "compatibility_date": "2026-10-19",
-  "main": "worker/index.ts",
-  "assets": {
-    "directory": "./dist/",
-    "not_found_handling": "single-page-application",
-    "base_path": "/",
-    "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
-  }
+	"name": "crossvideo",
+	"compatibility_date": "2026-10-19",
+	"main": "worker/index.ts",
+	"assets": {
+		"directory": "./dist/",
+		"not_found_handling": "single-page-application",
+		"base_path": "/",
+		"binding": "ASSETS",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	"vars": {
+		"BACKEND_URL": "https://example.com"
+	},
+	"observability": {
+		"logs": {
+			"enabled": false
+		}
+	}
 }

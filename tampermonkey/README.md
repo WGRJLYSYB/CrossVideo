@@ -15,6 +15,7 @@ CrossVideo Userscript 用于识别网页中的主要 HTML5 视频播放器，并
 - Searchable, paginated playback history
 - Delete individual history records
 - Filter history to the current website
+- Use the top-level page URL and title for videos embedded in iframes, with a single top-level UI and iframe resume prompts relayed to it
 - Cross-device website blocklist
 - Configurable API address with no server address embedded in the published script
 - SPA route changes and dynamic video elements supported

@@ -2,8 +2,7 @@
     default_sni {$CADDY_SITE_ADDRESS}
 }
 
-:443 {
-# {$CADDY_SITE_ADDRESS} {
+{$CADDY_SITE_ADDRESS} {
     tls /etc/caddy/cert/{$CADDY_CERT_FULLCHAIN} /etc/caddy/cert/{$CADDY_CERT_PRIVKEY}
     encode gzip
 
@@ -38,23 +37,17 @@
         header -Via
     }
 
-    handle {
+    handle_path /admin* {
         root * /srv/admin
         try_files {path} /index.html
         file_server
     }
 
-    # handle_path /admin* {
-    #     root * /srv/admin
-    #     try_files {path} /index.html
-    #     file_server
-    # }
-
-    # handle {
-    #     root * /srv/official-website
-    #     rewrite * /404.html
-    #     file_server {
-    #         status 404
-    #     }
-    # }
+    handle {
+        root * /srv/official-website
+        rewrite * /404.html
+        file_server {
+            status 404
+        }
+    }
 }
