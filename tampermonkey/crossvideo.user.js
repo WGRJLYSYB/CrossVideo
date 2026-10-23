@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.9
+// @version      0.1.11
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -94,7 +94,61 @@ See LICENSE file in repository root for full license text.
 
     const token = () => GM_getValue(TOKEN_KEY, '');
     const apiBase = () => `${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE).replace(/\/+$/, '')}/api/v1`;
-    const siteHost = () => location.hostname.toLowerCase();
+    const PAGE_INFO_REQUEST = 'crossvideo:page-info-request';
+    const PAGE_INFO_RESPONSE = 'crossvideo:page-info-response';
+    const RESUME_TOAST_REQUEST = 'crossvideo:resume-toast-request';
+    const RESUME_TOAST_ACTION = 'crossvideo:resume-toast-action';
+    let pageInfoRequestId = 0;
+    const pendingPageInfo = new Map();
+    let pendingResumeToast = null;
+    let pendingResumeToastId = 0;
+    let bridgedToastCleanup = null;
+    window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (window.top === window && message?.type === PAGE_INFO_REQUEST && event.source) {
+            event.source.postMessage({
+                type: PAGE_INFO_RESPONSE,
+                requestId: message.requestId,
+                url: location.href,
+                title: document.title,
+            }, '*');
+        } else if (window.top === window && message?.type === RESUME_TOAST_REQUEST && event.source
+            && typeof message.requestId === 'string' && Number.isFinite(message.progress)) {
+            showBridgedToast(message.progress, event.source, message.requestId);
+        } else if (window.top !== window && event.source === window.top && message?.type === PAGE_INFO_RESPONSE) {
+            const resolve = pendingPageInfo.get(message.requestId);
+            if (resolve && typeof message.url === 'string' && typeof message.title === 'string') {
+                pendingPageInfo.delete(message.requestId);
+                resolve({ url: message.url, title: message.title });
+            }
+        } else if (window.top !== window && event.source === window.top && message?.type === RESUME_TOAST_ACTION
+            && pendingResumeToast?.requestId === message.requestId) {
+            const pending = pendingResumeToast;
+            pendingResumeToast = null;
+            window.clearTimeout(pending.timeout);
+            if (message.action === 'resume') pending.resume();
+        }
+    });
+    const getPageInfo = () => {
+        if (window.top === window) return Promise.resolve({ url: location.href, title: document.title });
+        const requestId = `${Date.now()}-${++pageInfoRequestId}`;
+        return new Promise((resolve) => {
+            const timeout = window.setTimeout(() => {
+                pendingPageInfo.delete(requestId);
+                resolve(null);
+            }, 1500);
+            pendingPageInfo.set(requestId, (pageInfo) => {
+                window.clearTimeout(timeout);
+                resolve(pageInfo);
+            });
+            window.top.postMessage({ type: PAGE_INFO_REQUEST, requestId }, '*');
+        });
+    };
+    const siteHost = async () => {
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) throw new Error('无法获取最外层网页信息');
+        return new URL(pageInfo.url).hostname.toLowerCase();
+    };
     const requestErrorMessage = (data, status) => {
         if (Array.isArray(data.detail)) {
             return data.detail.map((item) => `${item.loc?.at(-1) || '请求'}: ${item.msg}`).join('；');
@@ -131,8 +185,8 @@ See LICENSE file in repository root for full license text.
         return [hours, minutes, remainder].map((part) => String(part).padStart(2, '0')).join(':');
     };
 
-    const cleanUrl = () => {
-        const url = new URL(location.href);
+    const cleanUrl = (pageUrl = location.href) => {
+        const url = new URL(pageUrl);
         const keep = new URLSearchParams();
         const host = url.hostname.toLowerCase();
         if (host.includes('youtube.com')) {
@@ -156,6 +210,7 @@ See LICENSE file in repository root for full license text.
     };
 
     const removeToast = () => {
+        bridgedToastCleanup?.();
         root.querySelector('.cv-toast')?.remove();
     };
 
@@ -170,6 +225,24 @@ See LICENSE file in repository root for full license text.
 
     const showToast = (progress, duration, video, session) => {
         removeToast();
+        if (window.top !== window) {
+            const requestId = `${Date.now()}-${++pendingResumeToastId}`;
+            if (pendingResumeToast) window.clearTimeout(pendingResumeToast.timeout);
+            const timeout = window.setTimeout(() => {
+                if (pendingResumeToast?.requestId === requestId) pendingResumeToast = null;
+            }, 6000);
+            pendingResumeToast = {
+                requestId,
+                timeout,
+                resume: () => {
+                    video.currentTime = progress;
+                    video.play().catch(() => {});
+                    session.restored = true;
+                },
+            };
+            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress }, '*');
+            return;
+        }
         const toast = document.createElement('div');
         toast.className = 'cv-toast';
         toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
@@ -210,6 +283,56 @@ See LICENSE file in repository root for full license text.
         expirationTimer = window.setTimeout(dismiss, 6000);
     };
 
+    const showBridgedToast = (progress, frameWindow, requestId) => {
+        removeToast();
+        const toast = document.createElement('div');
+        toast.className = 'cv-toast';
+        toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
+        const positionToast = () => {
+            const frame = [...document.querySelectorAll('iframe, frame')].find((element) => element.contentWindow === frameWindow);
+            if (frame) {
+                const bounds = frame.getBoundingClientRect();
+                toast.style.left = `${bounds.left + bounds.width / 2}px`;
+                toast.style.top = `${bounds.top + 10}px`;
+            } else {
+                toast.style.left = '50%';
+                toast.style.top = '10px';
+            }
+            toast.style.transform = 'translateX(-50%)';
+        };
+        positionToast();
+        window.addEventListener('resize', positionToast);
+        window.addEventListener('scroll', positionToast, true);
+        const cancelButton = toast.querySelector('.secondary');
+        const expiresAt = Date.now() + 6000;
+        const countdown = window.setInterval(() => {
+            cancelButton.textContent = `取消（${Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))}秒）`;
+        }, 250);
+        let expirationTimer;
+        const dismiss = (action) => {
+            window.clearInterval(countdown);
+            window.clearTimeout(expirationTimer);
+            window.removeEventListener('resize', positionToast);
+            window.removeEventListener('scroll', positionToast, true);
+            toast.remove();
+            if (bridgedToastCleanup === cleanup) bridgedToastCleanup = null;
+            frameWindow.postMessage({ type: RESUME_TOAST_ACTION, requestId, action }, '*');
+        };
+        const cleanup = () => {
+            window.clearInterval(countdown);
+            window.clearTimeout(expirationTimer);
+            window.removeEventListener('resize', positionToast);
+            window.removeEventListener('scroll', positionToast, true);
+            toast.remove();
+            if (bridgedToastCleanup === cleanup) bridgedToastCleanup = null;
+        };
+        bridgedToastCleanup = cleanup;
+        cancelButton.onclick = () => dismiss('cancel');
+        root.appendChild(toast);
+        toast.querySelector('.cv-button').onclick = () => dismiss('resume');
+        expirationTimer = window.setTimeout(cleanup, 6000);
+    };
+
     const isCandidate = (video) => {
         const fullScreen = document.fullscreenElement === video || video.webkitDisplayingFullscreen;
         const largeEnough = video.getBoundingClientRect().width / window.innerWidth > 0.5 || fullScreen;
@@ -219,12 +342,12 @@ See LICENSE file in repository root for full license text.
     const sync = async (session) => {
         if (!session || !session.qualified || !token() || !Number.isFinite(session.video.duration)) return;
         try {
-            if (document.title) session.title = document.title;
+            if (!await updateSessionPageInfo(session)) return;
             await request('POST', '/progress/sync', {
-                site_host: siteHost(),
+                site_host: session.siteHost,
                 url_hash: session.urlHash,
                 clean_url: session.cleanUrl,
-                title: session.title || document.title || session.cleanUrl,
+                title: session.title || session.cleanUrl,
                 progress_seconds: session.video.currentTime,
                 duration: session.video.duration,
                 client_updated_at: new Date().toISOString(),
@@ -234,7 +357,8 @@ See LICENSE file in repository root for full license text.
 
     const query = async (session) => {
         try {
-            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
+            if (!await updateSessionPageInfo(session)) return;
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}`);
             if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showToast(result.progress_seconds, session.video.duration, session.video, session);
         } catch (_) { /* Anonymous or offline pages remain usable. */ }
     }
@@ -245,12 +369,12 @@ See LICENSE file in repository root for full license text.
         state.session?.cleanup?.();
         removeToast();
         state.activeVideo = video;
-        const url = cleanUrl();
-        const session = { video, routeUrl: location.href, cleanUrl: url, urlHash: await sha256(url), title: document.title || url, interacted: false, playedSeconds: 0, qualified: false, restored: false };
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) return;
+        const url = cleanUrl(pageInfo.url);
+        const session = { video, routeUrl: location.href, pageUrl: pageInfo.url, cleanUrl: url, urlHash: await sha256(url), title: pageInfo.title || url, siteHost: new URL(pageInfo.url).hostname.toLowerCase(), interacted: false, playedSeconds: 0, qualified: false, restored: false };
         state.session = session;
-        const updateTitle = () => {
-            if (document.title && document.title !== session.title) session.title = document.title;
-        };
+        const updateTitle = () => updateSessionPageInfo(session);
         updateTitle();
         const markInteraction = () => { session.interacted = true; };
         video.addEventListener('click', markInteraction, { once: false });
@@ -280,6 +404,20 @@ See LICENSE file in repository root for full license text.
     const scan = () => {
         const videos = [...document.querySelectorAll('video')].filter(isCandidate);
         if (videos.length) startSession(videos.sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0]);
+    };
+
+    const updateSessionPageInfo = async (session) => {
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) return false;
+        const clean = cleanUrl(pageInfo.url);
+        if (session.pageUrl !== pageInfo.url) {
+            session.pageUrl = pageInfo.url;
+            session.cleanUrl = clean;
+            session.urlHash = await sha256(clean);
+        }
+        session.siteHost = new URL(pageInfo.url).hostname.toLowerCase();
+        session.title = pageInfo.title || clean;
+        return true;
     };
 
     const showModal = (content, cardClass = '') => {
@@ -360,7 +498,7 @@ See LICENSE file in repository root for full license text.
             loading = true;
             updatePagination();
             try {
-                const siteQuery = siteOnly.checked ? `&site_host=${encodeURIComponent(siteHost())}` : '';
+                const siteQuery = siteOnly.checked ? `&site_host=${encodeURIComponent(await siteHost())}` : '';
                 const result = await request('GET', `/progress/list?page=${targetPage}&page_size=${pageSize}&search=${encodeURIComponent(search)}${siteQuery}`);
                 total = result.total;
                 const items = result.items.map((item) => `<article class="cv-history-item" data-id="${item.id}" data-url="${escapeHtml(item.clean_url)}"><div class="cv-history-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}<span class="cv-history-completed" style="display: ${item.completed ? 'inline-block' : 'none'}">已看完</span></a><div class="cv-history-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-delete" type="button" aria-label="删除记录">🗑</button></article>`).join('');
@@ -412,7 +550,7 @@ See LICENSE file in repository root for full license text.
     const blockedSiteCache = { host: '', value: false, expiresAt: 0, request: null };
 
     const getBlockedForCurrentSite = async (force = false) => {
-        const host = siteHost();
+        const host = await siteHost();
         if (!force && blockedSiteCache.host === host && blockedSiteCache.expiresAt > Date.now()) return blockedSiteCache.value;
         if (!force && blockedSiteCache.request) return blockedSiteCache.request;
         blockedSiteCache.host = host;
@@ -443,11 +581,13 @@ See LICENSE file in repository root for full license text.
         try {
             const blocked = await getBlockedForCurrentSite();
             if (blocked) {
-                await request('DELETE', `/progress/blocked-sites/${encodeURIComponent(siteHost())}`);
+                const host = await siteHost();
+                await request('DELETE', `/progress/blocked-sites/${encodeURIComponent(host)}`);
                 blockedSiteCache.value = false;
                 showNotice('已解除当前网站黑名单');
             } else {
-                await request('POST', '/progress/blocked-sites', { site_host: siteHost() });
+                const host = await siteHost();
+                await request('POST', '/progress/blocked-sites', { site_host: host });
                 blockedSiteCache.value = true;
                 showNotice('已拉黑当前网站，并删除该网站历史记录');
             }
@@ -457,6 +597,7 @@ See LICENSE file in repository root for full license text.
         } catch (error) { showNotice(error.message); }
     };
     const registerMenus = async () => {
+        if (window.top !== window) return;
         const version = ++menuVersion;
         menuIds.filter((id) => id !== undefined).forEach((id) => {
             try { GM_unregisterMenuCommand(id); } catch (_) { /* Older managers may not support unregistering. */ }

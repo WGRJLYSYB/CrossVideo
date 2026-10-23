@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.11
+// @version      0.1.13
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -80,7 +80,61 @@ See LICENSE file in repository root for full license text.
 
     const token = () => GM_getValue(TOKEN_KEY, '');
     const apiBase = () => `${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE).replace(/\/+$/, '')}/api/v1`;
-    const siteHost = () => location.hostname.toLowerCase();
+    const PAGE_INFO_REQUEST = 'crossvideo:page-info-request';
+    const PAGE_INFO_RESPONSE = 'crossvideo:page-info-response';
+    const RESUME_TOAST_REQUEST = 'crossvideo:resume-toast-request';
+    const RESUME_TOAST_ACTION = 'crossvideo:resume-toast-action';
+    let pageInfoRequestId = 0;
+    const pendingPageInfo = new Map();
+    let pendingResumeToast = null;
+    let pendingResumeToastId = 0;
+    let bridgedToastCleanup = null;
+    window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (window.top === window && message?.type === PAGE_INFO_REQUEST && event.source) {
+            event.source.postMessage({
+                type: PAGE_INFO_RESPONSE,
+                requestId: message.requestId,
+                url: location.href,
+                title: document.title,
+            }, '*');
+        } else if (window.top === window && message?.type === RESUME_TOAST_REQUEST && event.source
+            && typeof message.requestId === 'string' && Number.isFinite(message.progress)) {
+            showBridgedToast(message.progress, event.source, message.requestId);
+        } else if (window.top !== window && event.source === window.top && message?.type === PAGE_INFO_RESPONSE) {
+            const resolve = pendingPageInfo.get(message.requestId);
+            if (resolve && typeof message.url === 'string' && typeof message.title === 'string') {
+                pendingPageInfo.delete(message.requestId);
+                resolve({ url: message.url, title: message.title });
+            }
+        } else if (window.top !== window && event.source === window.top && message?.type === RESUME_TOAST_ACTION
+            && pendingResumeToast?.requestId === message.requestId) {
+            const pending = pendingResumeToast;
+            pendingResumeToast = null;
+            clearTimeout(pending.timeout);
+            if (message.action === 'resume') pending.resume();
+        }
+    });
+    const getPageInfo = () => {
+        if (window.top === window) return Promise.resolve({ url: location.href, title: document.title });
+        const requestId = `${Date.now()}-${++pageInfoRequestId}`;
+        return new Promise((resolve) => {
+            const timeout = window.setTimeout(() => {
+                pendingPageInfo.delete(requestId);
+                resolve(null);
+            }, 1500);
+            pendingPageInfo.set(requestId, (pageInfo) => {
+                window.clearTimeout(timeout);
+                resolve(pageInfo);
+            });
+            window.top.postMessage({ type: PAGE_INFO_REQUEST, requestId }, '*');
+        });
+    };
+    const siteHost = async () => {
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) throw new Error('无法获取最外层网页信息');
+        return new URL(pageInfo.url).hostname.toLowerCase();
+    };
     const request = (method, path, body) => new Promise((resolve, reject) => {
         if (!GM_getValue(API_BASE_KEY, '')) { reject(new Error('请先配置接口地址')); return; }
         const headers = { 'Content-Type': 'application/json' };
@@ -107,8 +161,8 @@ See LICENSE file in repository root for full license text.
         const total = Math.max(0, Math.floor(Number(seconds) || 0));
         return [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60].map((part) => String(part).padStart(2, '0')).join(':');
     };
-    const cleanUrl = () => {
-        const url = new URL(location.href);
+    const cleanUrl = (pageUrl = location.href) => {
+        const url = new URL(pageUrl);
         const keep = new URLSearchParams();
         if (url.hostname.includes('youtube.com') && url.searchParams.get('v')) keep.set('v', url.searchParams.get('v'));
         else if (url.hostname.includes('bilibili.com')) ['p', 't'].forEach((key) => { if (url.searchParams.get(key)) keep.set(key, url.searchParams.get(key)); });
@@ -129,9 +183,29 @@ See LICENSE file in repository root for full license text.
         root.appendChild(node);
         setTimeout(() => node.remove(), 2200);
     };
-    const removeToast = () => root.querySelector('.cv-mobile-toast')?.remove();
+    const removeToast = () => {
+        bridgedToastCleanup?.();
+        root.querySelector('.cv-mobile-toast')?.remove();
+    };
     const showResumeToast = (progress, video) => {
         removeToast();
+        if (window.top !== window) {
+            const requestId = `${Date.now()}-${++pendingResumeToastId}`;
+            if (pendingResumeToast) clearTimeout(pendingResumeToast.timeout);
+            const timeout = setTimeout(() => {
+                if (pendingResumeToast?.requestId === requestId) pendingResumeToast = null;
+            }, 6000);
+            pendingResumeToast = {
+                requestId,
+                timeout,
+                resume: () => {
+                    video.currentTime = progress;
+                    video.play().catch(() => {});
+                },
+            };
+            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress }, '*');
+            return;
+        }
         const toast = document.createElement('div');
         toast.className = 'cv-mobile-toast';
         toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
@@ -151,6 +225,47 @@ See LICENSE file in repository root for full license text.
         toast.querySelector('.cv-mobile-button').onclick = () => { video.currentTime = progress; video.play().catch(() => {}); dismiss(); };
         toast.querySelector('.secondary').onclick = dismiss;
         expiry = setTimeout(dismiss, 6000);
+        root.appendChild(toast);
+    };
+    const showBridgedToast = (progress, frameWindow, requestId) => {
+        removeToast();
+        const toast = document.createElement('div');
+        toast.className = 'cv-mobile-toast';
+        toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
+        const position = () => {
+            const frame = [...document.querySelectorAll('iframe, frame')].find((element) => element.contentWindow === frameWindow);
+            if (frame) {
+                const bounds = frame.getBoundingClientRect();
+                toast.style.left = `${bounds.left + bounds.width / 2}px`;
+                toast.style.top = `${bounds.top + 10}px`;
+            } else {
+                toast.style.left = '50%';
+                toast.style.top = '10px';
+            }
+            toast.style.transform = 'translateX(-50%)';
+        };
+        const expiresAt = Date.now() + 6000;
+        const countdown = setInterval(() => { toast.querySelector('.secondary').textContent = `取消（${Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))}秒）`; }, 250);
+        let expiry;
+        const cleanup = () => {
+            clearInterval(countdown);
+            clearTimeout(expiry);
+            toast.remove();
+            window.removeEventListener('resize', position);
+            window.removeEventListener('scroll', position, true);
+            if (bridgedToastCleanup === cleanup) bridgedToastCleanup = null;
+        };
+        const dismiss = (action) => {
+            cleanup();
+            frameWindow.postMessage({ type: RESUME_TOAST_ACTION, requestId, action }, '*');
+        };
+        position();
+        window.addEventListener('resize', position);
+        window.addEventListener('scroll', position, true);
+        toast.querySelector('.cv-mobile-button').onclick = () => dismiss('resume');
+        toast.querySelector('.secondary').onclick = () => dismiss('cancel');
+        expiry = setTimeout(cleanup, 6000);
+        bridgedToastCleanup = cleanup;
         root.appendChild(toast);
     };
     const closePanel = () => {
@@ -225,7 +340,7 @@ See LICENSE file in repository root for full license text.
                 loading = true;
                 updatePages();
                 try {
-                    const filter = siteOnly.checked ? `&site_host=${encodeURIComponent(siteHost())}` : '';
+                    const filter = siteOnly.checked ? `&site_host=${encodeURIComponent(await siteHost())}` : '';
                     const result = await request('GET', `/progress/list?page=${target}&page_size=${pageSize}&search=${encodeURIComponent(search)}${filter}`);
                     total = result.total;
                     list.innerHTML = result.items.map((item) => `<article class="cv-mobile-item" data-url="${escapeHtml(item.clean_url)}" data-id="${item.id}"><div class="cv-mobile-main"><a href="${escapeHtml(item.clean_url)}">${escapeHtml(item.title)}<span class="cv-mobile-completed" style="display: ${item.completed ? 'inline-block' : 'none'}">已看完</span></a><div class="cv-mobile-meta">${formatTime(item.progress_seconds)} / ${formatTime(item.duration)} · ${new Date(item.updated_at).toLocaleString('zh-CN', { hour12: false })}</div></div><button class="cv-mobile-delete">🗑</button></article>`).join('') || '<p>没有找到匹配的播放记录</p>';
@@ -249,25 +364,42 @@ See LICENSE file in repository root for full license text.
     const sync = async (session) => {
         if (!session || !session.qualified || !token() || !Number.isFinite(session.video.duration)) return;
         try {
-            await request('POST', '/progress/sync', { site_host: siteHost(), url_hash: session.urlHash, clean_url: session.cleanUrl, title: document.title || session.cleanUrl, progress_seconds: session.video.currentTime, duration: session.video.duration, client_updated_at: new Date().toISOString() });
+            if (!await updateSessionPageInfo(session)) return;
+            await request('POST', '/progress/sync', { site_host: session.siteHost, url_hash: session.urlHash, clean_url: session.cleanUrl, title: session.title || session.cleanUrl, progress_seconds: session.video.currentTime, duration: session.video.duration, client_updated_at: new Date().toISOString() });
         } catch (_) { /* Ignore transient mobile network failures. */ }
     };
 
     const query = async (session) => {
         if (!session || !token()) return;
         try {
-            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(siteHost())}`);
+            if (!await updateSessionPageInfo(session)) return;
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}`);
             if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showResumeToast(result.progress_seconds, session.video);
         } catch (_) { /* Ignore unavailable resume queries on mobile networks. */ }
     };
 
     const candidate = (video) => video.getBoundingClientRect().width / innerWidth > .5 && Number.isFinite(video.duration) && video.duration > 180;
+    const updateSessionPageInfo = async (session) => {
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) return false;
+        const clean = cleanUrl(pageInfo.url);
+        if (session.pageUrl !== pageInfo.url) {
+            session.pageUrl = pageInfo.url;
+            session.cleanUrl = clean;
+            session.urlHash = await sha256(clean);
+        }
+        session.siteHost = new URL(pageInfo.url).hostname.toLowerCase();
+        session.title = pageInfo.title || clean;
+        return true;
+    };
     const scan = async () => {
         const video = [...document.querySelectorAll('video')].filter(candidate).sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0];
         if (!video || (state.session?.video === video && state.session.routeUrl === location.href)) return;
+        const pageInfo = await getPageInfo();
+        if (!pageInfo) return;
         if (state.timer) clearInterval(state.timer);
-        const clean = cleanUrl();
-        state.session = { video, routeUrl: location.href, cleanUrl: clean, urlHash: await sha256(clean), qualified: false };
+        const clean = cleanUrl(pageInfo.url);
+        state.session = { video, routeUrl: location.href, pageUrl: pageInfo.url, cleanUrl: clean, urlHash: await sha256(clean), title: pageInfo.title || clean, siteHost: new URL(pageInfo.url).hostname.toLowerCase(), qualified: false };
         const session = state.session;
         let played = 0;
         video.addEventListener('click', () => { session.qualified = true; });
@@ -280,14 +412,16 @@ See LICENSE file in repository root for full license text.
         await query(session);
     };
 
-    const fab = document.createElement('button');
-    fab.className = 'cv-mobile-fab';
-    fab.type = 'button';
-    fab.textContent = '📽️';
-    fab.setAttribute('aria-label', '打开 CrossVideo 菜单');
-    fab.title = 'CrossVideo';
-    fab.onclick = () => token() ? showHistory() : showAuth();
-    root.appendChild(fab);
+    if (window.top === window) {
+        const fab = document.createElement('button');
+        fab.className = 'cv-mobile-fab';
+        fab.type = 'button';
+        fab.textContent = '📽️';
+        fab.setAttribute('aria-label', '打开 CrossVideo 菜单');
+        fab.title = 'CrossVideo';
+        fab.onclick = () => token() ? showHistory() : showAuth();
+        root.appendChild(fab);
+    }
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
     const routeChanged = () => { state.session = null; if (state.timer) clearInterval(state.timer); setTimeout(scan, 500); };
