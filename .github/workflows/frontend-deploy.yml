@@ -45,4 +45,4 @@ jobs:
           source: "frontend/dist/"
           target: ${{ secrets.FRONTEND_DIST_PATH }}
           strip_components: 2
-          rm: true
+        #   rm: true    # 会导致caddy返回404，原因是dist目录被删除了，caddy无法访问到index.html
