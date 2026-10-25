@@ -8,6 +8,10 @@ RUN npm run build
 
 # 阶段二：使用极轻量的 Nginx 托管静态文件 (总镜像体积通常小于 25MB)
 FROM nginx:alpine
+
+# 【新增】将自定义的 Nginx 配置文件复制到配置目录中
+COPY default.conf /etc/nginx/conf.d/default.conf
+
 # 将构建产物复制到 Nginx 默认托管目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 
