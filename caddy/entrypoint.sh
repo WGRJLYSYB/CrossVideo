@@ -14,7 +14,7 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
     # 创建标准目录
     mkdir -p "$ACME_HOME" "$CERT_DIR" /srv/.well-known/acme-challenge
 
-    # 处理邮箱
+    # 处理邮箱：优先读取环境变量 -> 其次读取持久化文件 -> 最后自动生成并保存
     if [ -n "$CADDY_ACME_EMAIL" ]; then
         ACME_EMAIL="$CADDY_ACME_EMAIL"
     elif [ -f "$EMAIL_CONFIG_FILE" ]; then
@@ -25,39 +25,41 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
         echo "已自动生成并持久化随机注册邮箱: $ACME_EMAIL"
     fi
 
-    # 如果因为 /data 挂载卷导致 acme.sh 不存在，则直接下载源码并安装
+    # 1. 干净地初始化 acme.sh
     if [ ! -f "$ACME_HOME/acme.sh" ]; then
-        echo "检测到 acme.sh 未安装（或数据卷为空），正在直接下载并安装..."
-        mkdir -p "$ACME_HOME"
-        curl -L https://github.com/acmesh-official/acme.sh/archive/master.tar.gz | tar xz -C "$ACME_HOME" --strip-components=1
-        "$ACME_HOME"/acme.sh --install -m "$ACME_EMAIL" --home "$ACME_HOME"
+        echo "检测到 acme.sh 不存在，正在通过 Git 安装..."
+        rm -rf "$ACME_HOME"
+        git clone --depth=1 https://github.com/acmesh-official/acme.sh.git "$ACME_HOME"
+        "$ACME_HOME"/acme.sh --install -m "$ACME_EMAIL" --home "$ACME_HOME" > /dev/null 2>&1 || true
     fi
 
-    # 首次申请证书判定
+    # 2. 首次申请证书判定
     if [ ! -f "$CERT_DIR/fullchain.pem" ]; then
         echo "检测到证书不存在，正在为公网 IP: $CADDY_SITE_ADDRESS 首次申请..."
         
-        # 临时启动 Caddy 响应 80 端口验证
-        caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
-        CADDY_PID=$!
-        sleep 3
+        # 【关键优化】使用 Alpine 自带的轻量级 httpd 专门响应 80 端口验证
+        # 彻底避免 Caddy 因为找不到证书而崩溃退出的问题
+        httpd -p 80 -h /srv
+        HTTPD_PID=$!
+        sleep 1
 
-        # 使用 --home 指定持久化目录注册与申请
+        # 注册与申请
         "$ACME_HOME"/acme.sh --home "$ACME_HOME" --register-account -m "$ACME_EMAIL" > /dev/null 2>&1 || true
         "$ACME_HOME"/acme.sh --home "$ACME_HOME" --issue --server letsencrypt --certificate-profile shortlived \
             -d "$CADDY_SITE_ADDRESS" --webroot /srv
 
+        # 安装证书到持久化目录
         "$ACME_HOME"/acme.sh --home "$ACME_HOME" --install-cert -d "$CADDY_SITE_ADDRESS" --ecc \
             --key-file "$CERT_DIR/privkey.pem" \
             --fullchain-file "$CERT_DIR/fullchain.pem" \
             --reloadcmd "caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile"
 
-        kill $CADDY_PID
-        wait $CADDY_PID 2>/dev/null
+        # 关闭临时验证服务器
+        kill $HTTPD_PID 2>/dev/null || true
         echo "首次 IP 证书申请并安装成功！"
     fi
 
-    # 后台循环守护：每 12 小时检查一次续期
+    # 3. 后台循环守护：每 12 小时检查一次续期
     (
         while true; do
             sleep 43200

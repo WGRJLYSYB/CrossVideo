@@ -1,6 +1,6 @@
 FROM caddy:alpine
 
-RUN apk add --no-cache bash curl socat openssl
+RUN apk add --no-cache bash curl socat openssl git
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY entrypoint.sh /entrypoint.sh
