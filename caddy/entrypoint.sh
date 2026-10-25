@@ -4,7 +4,6 @@ set -e
 CADDY_ENABLE_ACME="${CADDY_ENABLE_ACME:-true}"
 CADDY_SITE_ADDRESS="${CADDY_SITE_ADDRESS:-}"
 
-# 采用更规范的容器内部路径，并统一归纳到持久化的 /data 目录中
 ACME_HOME="/data/acme.sh"
 CERT_DIR="/data/certs"
 EMAIL_CONFIG_FILE="/data/acme_email.txt"
@@ -15,7 +14,7 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
     # 创建标准目录
     mkdir -p "$ACME_HOME" "$CERT_DIR" /srv/.well-known/acme-challenge
 
-    # 处理邮箱：优先读取环境变量 -> 其次读取持久化文件 -> 最后自动生成并保存
+    # 处理邮箱
     if [ -n "$CADDY_ACME_EMAIL" ]; then
         ACME_EMAIL="$CADDY_ACME_EMAIL"
     elif [ -f "$EMAIL_CONFIG_FILE" ]; then
@@ -24,6 +23,12 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
         ACME_EMAIL="admin_$(openssl rand -hex 4)@domain.local"
         echo "$ACME_EMAIL" > "$EMAIL_CONFIG_FILE"
         echo "已自动生成并持久化随机注册邮箱: $ACME_EMAIL"
+    fi
+
+    # 【关键修复】如果因为 /data 挂载卷导致 acme.sh 不存在，则在运行时自动安装
+    if [ ! -f "$ACME_HOME/acme.sh" ]; then
+        echo "检测到 acme.sh 未安装（或数据卷为空），正在自动安装..."
+        curl https://get.acme.sh | sh -s -- --home "$ACME_HOME" --email "$ACME_EMAIL"
     fi
 
     # 首次申请证书判定
