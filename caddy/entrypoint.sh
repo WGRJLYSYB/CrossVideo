@@ -25,10 +25,12 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
         echo "已自动生成并持久化随机注册邮箱: $ACME_EMAIL"
     fi
 
-    # 【关键修复】如果因为 /data 挂载卷导致 acme.sh 不存在，则在运行时自动安装
+    # 如果因为 /data 挂载卷导致 acme.sh 不存在，则直接下载源码并安装
     if [ ! -f "$ACME_HOME/acme.sh" ]; then
-        echo "检测到 acme.sh 未安装（或数据卷为空），正在自动安装..."
-        curl https://get.acme.sh | sh -s -- --home "$ACME_HOME" --email "$ACME_EMAIL"
+        echo "检测到 acme.sh 未安装（或数据卷为空），正在直接下载并安装..."
+        mkdir -p "$ACME_HOME"
+        curl -L https://github.com/acmesh-official/acme.sh/archive/master.tar.gz | tar xz -C "$ACME_HOME" --strip-components=1
+        "$ACME_HOME"/acme.sh --install -m "$ACME_EMAIL" --home "$ACME_HOME"
     fi
 
     # 首次申请证书判定
