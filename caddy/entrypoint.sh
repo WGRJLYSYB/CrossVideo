@@ -37,11 +37,10 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
     if [ ! -f "$CERT_DIR/fullchain.pem" ]; then
         echo "检测到证书不存在，正在为公网 IP: $CADDY_SITE_ADDRESS 首次申请..."
         
-        # 【关键优化】使用 Alpine 自带的轻量级 httpd 专门响应 80 端口验证
-        # 彻底避免 Caddy 因为找不到证书而崩溃退出的问题
-        httpd -p 80 -h /srv
-        HTTPD_PID=$!
-        sleep 1
+        # 【关键优化】使用专门的 bootstrap 配置文件启动 80 端口静态服务器，绝不触发 TLS 报错
+        caddy run --config /etc/caddy/Caddyfile.bootstrap --adapter caddyfile &
+        CADDY_PID=$!
+        sleep 2
 
         # 注册与申请
         "$ACME_HOME"/acme.sh --home "$ACME_HOME" --register-account -m "$ACME_EMAIL" > /dev/null 2>&1 || true
@@ -55,7 +54,8 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
             --reloadcmd "caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile"
 
         # 关闭临时验证服务器
-        kill $HTTPD_PID 2>/dev/null || true
+        kill $CADDY_PID
+        wait $CADDY_PID 2>/dev/null
         echo "首次 IP 证书申请并安装成功！"
     fi
 
