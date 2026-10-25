@@ -1,0 +1,219 @@
+name: Production CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # 1. 路径检测：精准判断是哪个子目录或 compose 文件发生了修改
+  # -------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      compose: ${{ steps.filter.outputs.compose }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      caddy: ${{ steps.filter.outputs.caddy }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            compose:
+              - 'docker-compose.yml'
+              - '.env'
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            caddy:
+              - 'caddy/**'
+
+  # -------------------------------------------------------------
+  # 2. 基础任务：每次提交优先将根目录的 docker-compose.yml 发送到服务器
+  # -------------------------------------------------------------
+  deploy-compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Copy root docker-compose.yml to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "${{ secrets.CROSSVIDEO_ROOT_DIR }}"
+
+  # -------------------------------------------------------------
+  # 3. 【新增】全局编排变更处理：当 docker-compose.yml 改变时生效新服务（如 Redis/MQ）
+  # -------------------------------------------------------------
+  apply-compose-changes:
+    needs: [changes, deploy-compose]
+    if: needs.changes.outputs.compose == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Apply Global Compose Changes via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
+            # 拉取 compose 文件中所有服务（包括新加的公共服务如 Redis、RabbitMQ）的镜像
+            docker compose pull
+            # 整体应用配置：启动新增服务、更新修改项、清理废弃容器
+            docker compose up -d --remove-orphans
+
+  # -------------------------------------------------------------
+  # 4. 后端 CI/CD（依赖 compose 完成，且仅当 backend 目录改变时运行）
+  # -------------------------------------------------------------
+  backend-ci-cd:
+    needs: [changes, deploy-compose]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract short Git SHA
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:${{ steps.vars.outputs.sha_short }}
+
+      - name: Deploy Backend via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
+            docker compose pull backend
+            docker compose up -d --no-deps --remove-orphans backend
+            docker image prune -f
+
+  # -------------------------------------------------------------
+  # 5. 前端 CI/CD（依赖 compose 完成，且仅当 frontend 目录改变时运行）
+  # -------------------------------------------------------------
+  frontend-ci-cd:
+    needs: [changes, deploy-compose]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract short Git SHA
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-frontend:latest
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-frontend:${{ steps.vars.outputs.sha_short }}
+
+      - name: Deploy Frontend via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
+            docker compose pull frontend
+            docker compose up -d --no-deps --remove-orphans frontend
+            docker image prune -f
+
+  # -------------------------------------------------------------
+  # 6. Caddy CI/CD（依赖 compose 完成，且仅当 caddy 目录改变时运行）
+  # -------------------------------------------------------------
+  caddy-ci-cd:
+    needs: [changes, deploy-compose]
+    if: needs.changes.outputs.caddy == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract short Git SHA
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push caddy image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./caddy
+          file: ./caddy/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-caddy:latest
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-caddy:${{ steps.vars.outputs.sha_short }}
+
+      - name: Deploy Caddy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
+            docker compose pull caddy
+            docker compose up -d --no-deps --remove-orphans caddy
+            docker image prune -f
