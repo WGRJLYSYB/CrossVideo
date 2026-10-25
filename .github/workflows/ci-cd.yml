@@ -24,7 +24,7 @@ jobs:
       caddy: ${{ steps.filter.outputs.caddy }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -102,7 +102,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -149,7 +149,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -196,7 +196,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push caddy image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./caddy
           file: ./caddy/Dockerfile

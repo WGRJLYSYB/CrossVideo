@@ -2,7 +2,7 @@ FROM caddy:alpine
 
 RUN apk add --no-cache bash curl socat openssl
 
-RUN curl https://get.acme.sh | sh -s -- --home /opt/acme.sh --email placeholder@example.com
+RUN curl https://get.acme.sh | sh -s -- --home /data/acme.sh --email placeholder@example.com
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY entrypoint.sh /entrypoint.sh
