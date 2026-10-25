@@ -22,25 +22,50 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  api:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
     image: johnpaulreed/crossvideo-backend:latest
-    # build: .
     restart: unless-stopped
     logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       TZ: Asia/Shanghai
       CROSSVIDEO_SECRET_KEY: ${CROSSVIDEO_SECRET_KEY:?CROSSVIDEO_SECRET_KEY is required}
       CROSSVIDEO_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crossvideo}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-crossvideo}
+      CROSSVIDEO_REDIS_URL: redis://redis:6379/0
+      CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES: ${CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       CROSSVIDEO_CORS_ORIGINS: '["*"]'
+    networks:
+      - app-network
     healthcheck:
       test:
         [
@@ -53,30 +78,50 @@ services:
       timeout: 5s
       retries: 10
 
+  frontend:
+    image: johnpaulreed/crossvideo-frontend:latest
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   caddy:
-    image: caddy:2-alpine
+    image: johnpaulreed/crossvideo-caddy:latest
     restart: unless-stopped
     logging: *default-logging
     depends_on:
-      api:
+      backend:
         condition: service_healthy
+      frontend:
+        condition: service_started
     ports:
       - "443:443"
-      # - "80:80"
+      - "80:80"
     environment:
       TZ: Asia/Shanghai
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
-      CADDY_CERT_FULLCHAIN: ${CADDY_CERT_FULLCHAIN:?CADDY_CERT_FULLCHAIN is required}
-      CADDY_CERT_PRIVKEY: ${CADDY_CERT_PRIVKEY:?CADDY_CERT_PRIVKEY is required}
+      CADDY_ENABLE_ACME: "true"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../frontend/dist:/srv/admin:ro
-      - ../official-website:/srv/official-website:ro
       - caddy-data:/data
       - caddy-config:/config
-      - ${CADDY_CERT_DIR:?CADDY_CERT_DIR is required}:/etc/caddy/cert:ro
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres-data:
+  redis-data:
   caddy-data:
   caddy-config:
