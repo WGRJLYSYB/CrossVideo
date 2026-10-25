@@ -1,3 +1,6 @@
+# CrossVideo — Cross‑platform video playback progress synchronization tool
+# 2026-10-25 14:21:10 调整数据库迁移策略
+
 x-logging: &default-logging
   driver: json-file
   options:

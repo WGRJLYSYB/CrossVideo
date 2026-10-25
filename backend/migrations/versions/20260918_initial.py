@@ -30,6 +30,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255);")
+    
     bind = op.get_bind()
     inspector = inspect(bind)
     tables = set(inspector.get_table_names())
