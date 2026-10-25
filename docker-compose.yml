@@ -125,6 +125,7 @@ networks:
 
 volumes:
   postgres-data:
+    name: backend_postgres-data  # 强制指定为原来的旧卷名称，直接复用历史数据！
   redis-data:
   caddy-data:
   caddy-config:
