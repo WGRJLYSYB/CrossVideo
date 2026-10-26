@@ -74,6 +74,7 @@ jobs:
           username: ${{ secrets.VPS_SSH_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             # 拉取 compose 文件中所有服务（包括新加的公共服务如 Redis、RabbitMQ）的镜像
             docker compose pull
@@ -119,6 +120,7 @@ jobs:
           username: ${{ secrets.VPS_SSH_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull postgres
             docker compose up -d --no-deps --remove-orphans postgres
@@ -166,6 +168,7 @@ jobs:
           username: ${{ secrets.VPS_SSH_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull backend
             docker compose up -d --no-deps --remove-orphans backend
@@ -213,6 +216,7 @@ jobs:
           username: ${{ secrets.VPS_SSH_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull frontend
             docker compose up -d --no-deps --remove-orphans frontend
@@ -260,6 +264,7 @@ jobs:
           username: ${{ secrets.VPS_SSH_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull caddy
             docker compose up -d --no-deps --remove-orphans caddy
