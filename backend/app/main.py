@@ -16,11 +16,20 @@
 
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .routers import admin, auth, progress
+
+
+sentry_sdk.init(
+    dsn="https://c364a265c1ba6470ceda012b9d78fcc5@o4512321379565568.ingest.us.sentry.io/4512321891663872",
+    traces_sample_rate=1.0,
+    profile_session_sample_rate=1.0,
+    profile_lifecycle="trace",
+)
 
 
 @asynccontextmanager

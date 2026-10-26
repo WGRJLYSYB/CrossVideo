@@ -41,6 +41,8 @@ services:
       resources:
         limits:
           memory: 128M
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     networks:

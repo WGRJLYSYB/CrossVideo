@@ -139,6 +139,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-jose", extra = ["cryptography"] },
     { name = "python-multipart" },
+    { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -160,6 +161,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6,<3.0" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4.0" },
     { name = "python-multipart", specifier = ">=0.0.9,<1.0" },
+    { name = "sentry-sdk", specifier = ">=2.71.0" },
     { name = "sqlalchemy", specifier = ">=2.0,<3.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1.0" },
 ]

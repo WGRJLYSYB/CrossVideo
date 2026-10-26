@@ -20,6 +20,8 @@ import './assets/main.css'
 import App from './App.vue'
 import router from './router'
 
+import * as Sentry from "@sentry/vue";
+
 // Apply theme from localStorage (default: dark)
 const savedTheme = localStorage.getItem('crossvideo_theme') || 'dark'
 if (savedTheme === 'dark') {
@@ -30,6 +32,18 @@ if (savedTheme === 'dark') {
 
 const app = createApp(App)
 const pinia = createPinia()
+
+Sentry.init({
+  app,
+  dsn: "https://0ac1d7482e97fc63e1a20f8999e8201e@o4512321379565568.ingest.us.sentry.io/4512321908506624",
+  integrations: [
+    Sentry.browserTracingIntegration({ router }),
+    Sentry.replayIntegration()
+  ],
+  tracesSampleRate: 1.0,
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0
+});
 
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
