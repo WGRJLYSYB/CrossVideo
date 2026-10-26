@@ -122,7 +122,7 @@ jobs:
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull backend
             docker compose up -d --no-deps --remove-orphans backend
-            docker image prune -f
+            docker image prune -f || true
 
   # -------------------------------------------------------------
   # 5. 前端 CI/CD（依赖 compose 完成，且仅当 frontend 目录改变时运行）
@@ -169,7 +169,7 @@ jobs:
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull frontend
             docker compose up -d --no-deps --remove-orphans frontend
-            docker image prune -f
+            docker image prune -f || true
 
   # -------------------------------------------------------------
   # 6. Caddy CI/CD（依赖 compose 完成，且仅当 caddy 目录改变时运行）
@@ -216,4 +216,4 @@ jobs:
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
             docker compose pull caddy
             docker compose up -d --no-deps --remove-orphans caddy
-            docker image prune -f
+            docker image prune -f || true
