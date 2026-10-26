@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       compose: ${{ steps.filter.outputs.compose }}
+      postgres: ${{ steps.filter.outputs.postgres }}
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       caddy: ${{ steps.filter.outputs.caddy }}
@@ -31,6 +32,8 @@ jobs:
             compose:
               - 'docker-compose.yml'
               - '.env'
+            postgres:
+              - 'postgres/**'
             backend:
               - 'backend/**'
             frontend:
@@ -76,6 +79,50 @@ jobs:
             docker compose pull
             # 整体应用配置：启动新增服务、更新修改项、清理废弃容器
             docker compose up -d --remove-orphans
+
+  postgres-ci-cd:
+    needs: [changes, deploy-compose]
+    if: needs.changes.outputs.postgres == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract short Git SHA
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push postgres image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./postgres
+          file: ./postgres/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-postgres:latest
+            ${{ secrets.DOCKER_USERNAME }}/crossvideo-postgres:${{ steps.vars.outputs.sha_short }}
+
+      - name: Deploy Postgres via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_SSH_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
+            docker compose pull postgres
+            docker compose up -d --no-deps --remove-orphans postgres
+            docker image prune -f || true
 
   # -------------------------------------------------------------
   # 4. 后端 CI/CD（依赖 compose 完成，且仅当 backend 目录改变时运行）
