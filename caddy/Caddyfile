@@ -2,6 +2,12 @@
     default_sni {$CADDY_SITE_ADDRESS}
 }
 
+http://127.0.0.1 {
+    handle /health {
+        respond "OK" 200
+    }
+}
+
 https://{$CADDY_SITE_ADDRESS} {
     tls /data/certs/fullchain.pem /data/certs/privkey.pem
     encode gzip
