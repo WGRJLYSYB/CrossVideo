@@ -130,6 +130,25 @@ services:
     networks:
       - app-network
 
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - uptime-kuma-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -141,3 +160,4 @@ volumes:
   redis-data:
   caddy-data:
   caddy-config:
+  uptime-kuma-data:
