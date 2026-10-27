@@ -129,6 +129,11 @@ services:
       - caddy-config:/config
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   uptime-kuma:
     image: louislam/uptime-kuma:2
