@@ -20,7 +20,7 @@ https://{$CADDY_SITE_ADDRESS} {
         # HSTS 强制HTTPS（长期）
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         # 推荐CSP，现代XSS防护，替代过时X-XSS-Protection
-        Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.ingest.sentry.io; script-src 'self';"
+        Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.sentry.io; script-src 'self' blob:; worker-src 'self' blob:;"
         # 引用策略
         Referrer-Policy "strict-origin-when-cross-origin"
         # 关闭无用设备权限
