@@ -20,6 +20,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    sentry_dsn: str = ""  # 留空 = 不启用 Sentry
     app_name: str = "CrossVideo Progress API"
     secret_key: str = "change-this-secret-key-in-production"
     access_token_expire_minutes: int = 60 * 24 * 30

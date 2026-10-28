@@ -78,6 +78,7 @@ services:
       CROSSVIDEO_REDIS_URL: redis://redis:6379/0
       CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES: ${CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       CROSSVIDEO_CORS_ORIGINS: '["*"]'
+      CROSSVIDEO_SENTRY_DSN: ${CROSSVIDEO_SENTRY_DSN:-}
     networks:
       - app-network
     healthcheck:
@@ -100,6 +101,8 @@ services:
       resources:
         limits:
           memory: 128M
+    environment:
+      VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
     networks:
       - app-network
     healthcheck:

@@ -11,9 +11,11 @@ FROM nginx:alpine
 
 # 【新增】将自定义的 Nginx 配置文件复制到配置目录中
 COPY default.conf /etc/nginx/conf.d/default.conf
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 将构建产物复制到 Nginx 默认托管目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/entrypoint.sh"]

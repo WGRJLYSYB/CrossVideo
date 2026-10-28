@@ -24,20 +24,19 @@ from .config import get_settings
 from .routers import admin, auth, progress
 
 
-sentry_sdk.init(
-    dsn="https://c364a265c1ba6470ceda012b9d78fcc5@o4512321379565568.ingest.us.sentry.io/4512321891663872",
-    traces_sample_rate=1.0,
-    profile_session_sample_rate=1.0,
-    profile_lifecycle="trace",
-)
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     yield
 
 
 settings = get_settings()
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=1.0,
+        profile_session_sample_rate=1.0,
+        profile_lifecycle="trace",
+    )
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
