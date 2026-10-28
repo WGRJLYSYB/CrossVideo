@@ -104,6 +104,7 @@ import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { VideoPlay } from '@element-plus/icons-vue'
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
 

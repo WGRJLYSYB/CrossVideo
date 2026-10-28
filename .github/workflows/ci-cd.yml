@@ -42,12 +42,17 @@ jobs:
               - 'caddy/**'
 
   # -------------------------------------------------------------
-  # 2. 基础任务：每次提交优先将根目录的 docker-compose.yml 发送到服务器
+  # 2. 统一前置闸门：
+  #    - 总是把根目录 docker-compose.yml 同步到服务器
+  #    - 若 compose 有变更，则在此 job 内完成全局 pull + up
+  #    其他部署 job 都 needs 它，从而天然等待 compose 应用完毕
   # -------------------------------------------------------------
   deploy-compose:
+    needs: [changes]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+
       - name: Copy root docker-compose.yml to Server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -58,15 +63,8 @@ jobs:
           source: "docker-compose.yml"
           target: "${{ secrets.CROSSVIDEO_ROOT_DIR }}"
 
-  # -------------------------------------------------------------
-  # 3. 【新增】全局编排变更处理：当 docker-compose.yml 改变时生效新服务（如 Redis/MQ）
-  # -------------------------------------------------------------
-  apply-compose-changes:
-    needs: [changes, deploy-compose]
-    if: needs.changes.outputs.compose == 'true'
-    runs-on: ubuntu-24.04
-    steps:
       - name: Apply Global Compose Changes via SSH
+        if: needs.changes.outputs.compose == 'true'
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -127,7 +125,7 @@ jobs:
             docker image prune -f || true
 
   # -------------------------------------------------------------
-  # 4. 后端 CI/CD（依赖 compose 完成，且仅当 backend 目录改变时运行）
+  # 3. 后端 CI/CD（依赖 compose 闸门，且仅当 backend 目录改变时运行）
   # -------------------------------------------------------------
   backend-ci-cd:
     needs: [changes, deploy-compose]
@@ -175,7 +173,7 @@ jobs:
             docker image prune -f || true
 
   # -------------------------------------------------------------
-  # 5. 前端 CI/CD（依赖 compose 完成，且仅当 frontend 目录改变时运行）
+  # 4. 前端 CI/CD（依赖 compose 闸门，且仅当 frontend 目录改变时运行）
   # -------------------------------------------------------------
   frontend-ci-cd:
     needs: [changes, deploy-compose]
@@ -223,7 +221,7 @@ jobs:
             docker image prune -f || true
 
   # -------------------------------------------------------------
-  # 6. Caddy CI/CD（依赖 compose 完成，且仅当 caddy 目录改变时运行）
+  # 5. Caddy CI/CD（依赖 compose 闸门，且仅当 caddy 目录改变时运行）
   # -------------------------------------------------------------
   caddy-ci-cd:
     needs: [changes, deploy-compose]

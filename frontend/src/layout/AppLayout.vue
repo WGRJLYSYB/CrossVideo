@@ -205,6 +205,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { Clock, Star, VideoCamera, SwitchButton, Sunny, Moon, ArrowDown, Refresh, VideoPlay } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
