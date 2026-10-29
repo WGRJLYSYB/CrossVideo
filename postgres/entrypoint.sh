@@ -26,7 +26,7 @@ EOF
 
     # 配置 Crontab 任务：每天凌晨 3 点 (0 3 * * *) 执行备份，日志输出到标准输出
     CRON_SCHEDULE="${BACKUP_CRON_SCHEDULE:-0 3 * * *}"
-    echo "${CRON_SCHEDULE} /opt/backup.sh" > /etc/crontabs/root
+    echo "${CRON_SCHEDULE} /opt/backup.sh >> /var/log/backup.log 2>&1" > /etc/crontabs/root
     
     # 在后台启动 Alpine 的 crond 守护进程
     # -b: 后台运行，-l 2: 日志级别为 info，输出到标准输出
