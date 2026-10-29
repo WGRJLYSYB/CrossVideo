@@ -1,5 +1,4 @@
 # CrossVideo — Cross‑platform video playback progress synchronization tool
-# 2026-10-26 22:34:48 优化部署流程
 
 x-logging: &default-logging
   driver: json-file
@@ -32,7 +31,7 @@ services:
       DB_BACKUP_ENCRYPTION_PASSWORD: ${DB_BACKUP_ENCRYPTION_PASSWORD:-}
       WEBDAV_BACKUP_DIR: ${WEBDAV_BACKUP_DIR:-/crossvideo-backups}
       # BACKUP_CRON_SCHEDULE: "0 3 * * *"
-      BACKUP_CRON_SCHEDULE: "*/3 * * * *"
+      BACKUP_CRON_SCHEDULE: "*/2 * * * *"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
