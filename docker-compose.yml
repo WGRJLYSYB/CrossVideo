@@ -31,7 +31,8 @@ services:
       WEBDAV_PASSWORD: ${WEBDAV_PASSWORD:-}
       DB_BACKUP_ENCRYPTION_PASSWORD: ${DB_BACKUP_ENCRYPTION_PASSWORD:-}
       WEBDAV_BACKUP_DIR: ${WEBDAV_BACKUP_DIR:-/crossvideo-backups}
-      BACKUP_CRON_SCHEDULE: "0 3 * * *"
+      # BACKUP_CRON_SCHEDULE: "0 3 * * *"
+      BACKUP_CRON_SCHEDULE: "*/3 * * * *"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:

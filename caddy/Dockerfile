@@ -1,6 +1,6 @@
 FROM caddy:alpine
 
-RUN apk add --no-cache bash curl socat openssl git
+RUN apk add --no-cache bash curl socat openssl git tzdata
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY Caddyfile.bootstrap /etc/caddy/Caddyfile.bootstrap
