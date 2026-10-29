@@ -30,8 +30,7 @@ services:
       WEBDAV_PASSWORD: ${WEBDAV_PASSWORD:-}
       DB_BACKUP_ENCRYPTION_PASSWORD: ${DB_BACKUP_ENCRYPTION_PASSWORD:-}
       WEBDAV_BACKUP_DIR: ${WEBDAV_BACKUP_DIR:-/crossvideo-backups}
-      # BACKUP_CRON_SCHEDULE: "0 3 * * *"
-      BACKUP_CRON_SCHEDULE: "*/2 * * * *"
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 3 * * *}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -127,6 +126,7 @@ services:
       TZ: Asia/Shanghai
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
       CADDY_ENABLE_ACME: "true"
+      ACME_CRON_SCHEDULE: ${ACME_CRON_SCHEDULE:-0 4 * * *}
     volumes:
       - caddy-data:/data
       - caddy-config:/config

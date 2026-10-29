@@ -7,12 +7,13 @@ CADDY_SITE_ADDRESS="${CADDY_SITE_ADDRESS:-}"
 ACME_HOME="/data/acme.sh"
 CERT_DIR="/data/certs"
 EMAIL_CONFIG_FILE="/data/acme_email.txt"
+ACME_LOG_FILE="/var/log/acme-cron.log"
 
 if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] === ACME IP证书自动管理已启用 ==="
 
     # 创建标准目录
-    mkdir -p "$ACME_HOME" "$CERT_DIR" /srv/.well-known/acme-challenge
+    mkdir -p "$ACME_HOME" "$CERT_DIR" /srv/.well-known/acme-challenge /var/log
 
     # 处理邮箱：优先读取环境变量 -> 其次读取持久化文件 -> 最后自动生成并保存
     if [ -n "$CADDY_ACME_EMAIL" ]; then
@@ -36,7 +37,7 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
     # 2. 首次申请证书判定
     if [ ! -f "$CERT_DIR/fullchain.pem" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 检测到证书不存在，正在为公网 IP: $CADDY_SITE_ADDRESS 首次申请..."
-        
+
         # 【关键优化】使用专门的 bootstrap 配置文件启动 80 端口静态服务器，绝不触发 TLS 报错
         caddy run --config /etc/caddy/Caddyfile.bootstrap --adapter caddyfile &
         CADDY_PID=$!
@@ -59,15 +60,17 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 首次 IP 证书申请并安装成功！"
     fi
 
-    # 3. 后台循环守护：每 12 小时检查一次续期
-    (
-        while true; do
-            sleep 43200
-            "$ACME_HOME"/acme.sh --cron --home "$ACME_HOME" > /dev/null 2>&1
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ACME 证书续期检查完成。"
-        done
-    ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 后台续期守护进程已启动。"
+    # 3. 用 crond 替代后台 while 循环做续期检查
+    # acme.sh --cron 幂等，临近到期才续期，每天跑一次即可
+    ACME_CRON_SCHEDULE="${ACME_CRON_SCHEDULE:-0 4 * * *}"
+
+    # 显式写入 crontab 变量，避免 cron 环境下变量缺失
+    echo "${ACME_CRON_SCHEDULE} ${ACME_HOME}/acme.sh --cron --home ${ACME_HOME} >> ${ACME_LOG_FILE} 2>&1" > /etc/crontabs/root
+
+    # 启动 crond 守护进程
+    # -b: 后台运行，-l 2: 日志级别为
+    crond -b -l 2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 已通过 crond 注册 ACME 续期任务，计划: ${ACME_CRON_SCHEDULE}，日志: ${ACME_LOG_FILE}"
 else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] === ACME 自动管理未启用或未配置 IP，直接启动标准 Caddy ==="
 fi
