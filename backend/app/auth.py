@@ -16,7 +16,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pwdlib import PasswordHash
@@ -45,7 +45,11 @@ def create_access_token(user_id: int) -> str:
     return jwt.encode({"sub": str(user_id), "exp": expires_at}, settings.secret_key, algorithm="HS256")
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(
+    response: Response,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
     credentials_error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
     try:
         payload = jwt.decode(credentials.credentials, get_settings().secret_key, algorithms=["HS256"])
@@ -56,4 +60,5 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise credentials_error
+    response.headers["X-Access-Token"] = create_access_token(user.id)
     return user

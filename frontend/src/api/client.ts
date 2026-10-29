@@ -33,6 +33,10 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response) => {
+    const refreshedToken = response.headers['x-access-token']
+    if (typeof refreshedToken === 'string' && refreshedToken) {
+      localStorage.setItem('crossvideo_token', refreshedToken)
+    }
     return response.data
   },
   (error) => {

@@ -43,6 +43,8 @@ uv run pytest tests -q
 
 The production database is PostgreSQL. Alembic manages all schema changes. The Compose volume `postgres-data` persists database data independently from the API container.
 
+Access tokens are valid for 30 days by default and are renewed on each authenticated API response. Clients should save the `X-Access-Token` response header; the web admin and both userscripts do this automatically. Configure `CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES` to override the lifetime.
+
 ## Docker
 
 ```bash

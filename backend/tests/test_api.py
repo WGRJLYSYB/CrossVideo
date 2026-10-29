@@ -15,11 +15,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 os.environ["CROSSVIDEO_DATABASE_URL"] = "sqlite:///./data/test-crossvideo.db"
 os.environ["CROSSVIDEO_SECRET_KEY"] = "test-secret-key"
 
+from jose import jwt
 from fastapi.testclient import TestClient
 
 from app.db import Base, engine
@@ -53,6 +54,25 @@ def test_register_login_and_progress_round_trip():
     history = client.get("/api/v1/progress/list", headers=headers)
     assert history.status_code == 200
     assert history.json()["total"] == 1
+
+
+def test_authenticated_request_renews_token():
+    headers = auth_headers()
+    original_token = headers["Authorization"].removeprefix("Bearer ")
+    original_payload = jwt.decode(original_token, "test-secret-key", algorithms=["HS256"])
+    expiring_token = jwt.encode(
+        {"sub": original_payload["sub"], "exp": datetime.now(UTC) + timedelta(days=1)},
+        "test-secret-key",
+        algorithm="HS256",
+    )
+
+    response = client.get("/api/v1/progress/list", headers={"Authorization": f"Bearer {expiring_token}"})
+
+    assert response.status_code == 200
+    refreshed_token = response.headers["x-access-token"]
+    refreshed_payload = jwt.decode(refreshed_token, "test-secret-key", algorithms=["HS256"])
+    assert refreshed_payload["sub"] == original_payload["sub"]
+    assert refreshed_payload["exp"] > jwt.get_unverified_claims(expiring_token)["exp"]
 
 
 def test_completed_progress_is_not_offered_for_resume():
