@@ -4,7 +4,7 @@ set -e
 DB_BACKUP_ENABLED="${DB_BACKUP_ENABLED:-false}"
 
 if [ "$DB_BACKUP_ENABLED" = "true" ]; then
-    echo "=== 自动数据库云盘备份已启用 ==="
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] === 自动数据库云盘备份已启用 ==="
     
     WEBDAV_URL="${WEBDAV_URL:?DB_BACKUP_ENABLED 为 true 时必须提供 WEBDAV_URL}"
     WEBDAV_USER="${WEBDAV_USER:?DB_BACKUP_ENABLED 为 true 时必须提供 WEBDAV_USER}"
@@ -29,10 +29,11 @@ EOF
     echo "${CRON_SCHEDULE} /opt/backup.sh >> /proc/1/fd/1 2>&1" > /etc/crontabs/root
     
     # 在后台启动 Alpine 的 crond 守护进程
+    # -b: 后台运行，-l 2: 日志级别为 info，输出到标准输出
     crond -b -l 2
-    echo "已启动 Crond 守护进程，备份计划: ${CRON_SCHEDULE}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 已启动 Crond 守护进程，备份计划: ${CRON_SCHEDULE}"
 else
-    echo "=== 自动数据库云盘备份未启用 (DB_BACKUP_ENABLED!=true) ==="
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] === 自动数据库云盘备份未启用 (DB_BACKUP_ENABLED!=true) ==="
 fi
 
 # 启动官方 postgres 入口点，保留原有的初始化与数据库启动逻辑

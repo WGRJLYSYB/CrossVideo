@@ -3,6 +3,7 @@ set -e
 
 # 如果未开启备份，直接退出
 if [ "$DB_BACKUP_ENABLED" != "true" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] === 自动数据库云盘备份未启用 ==="
     exit 0
 fi
 
@@ -37,8 +38,9 @@ if [ -n "$DB_BACKUP_ENCRYPTION_PASSWORD" ]; then
         -in "$TMP_RAW_FILE" \
         -out "$TMP_ENC_FILE" \
         -pass pass:"$DB_BACKUP_ENCRYPTION_PASSWORD"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 数据库备份已加密为 AES-256-CBC 格式。"
 else
-    echo "警告: 未设置 BACKUP_ENCRYPTION_PASSWORD，跳过加密步骤！"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [警告] 未设置 BACKUP_ENCRYPTION_PASSWORD，跳过加密步骤！"
     mv "$TMP_RAW_FILE" "$TMP_ENC_FILE"
 fi
 
