@@ -17,15 +17,30 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..db import get_db
-from ..models import BlockedSite, PlaybackProgress, User
+from ..models import BlockedSite, PlaybackProgress, User, UserSite
 from ..schemas import ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
 
 router = APIRouter(prefix="/progress", tags=["progress"])
+
+SITE_NAMES = {
+    "bilibili.com": "哔哩哔哩",
+    "youtube.com": "YouTube",
+    "youtu.be": "YouTube",
+    "v.qq.com": "腾讯视频",
+    "iqiyi.com": "爱奇艺",
+    "youku.com": "优酷",
+    "mgtv.com": "芒果TV",
+    "ixigua.com": "西瓜视频",
+    "douyin.com": "抖音",
+    "netflix.com": "Netflix",
+}
 
 
 def as_utc(value: datetime | None) -> datetime | None:
@@ -41,22 +56,49 @@ def sync_progress(payload: ProgressSyncRequest, user: User = Depends(get_current
     progress_seconds = min(payload.progress_seconds, payload.duration)
     completed = progress_seconds / payload.duration >= 0.95
     incoming_time = as_utc(payload.client_updated_at) or datetime.now(UTC)
+    observed_at = datetime.now(UTC)
     existing = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == payload.url_hash))
+    host = payload.site_host.lower()
 
     if existing is None:
-        existing = PlaybackProgress(user_id=user.id, url_hash=payload.url_hash, site_host=payload.site_host.lower(), clean_url=payload.clean_url, title=payload.title, progress_seconds=0 if completed else progress_seconds, duration=payload.duration, completed=completed, client_updated_at=incoming_time)
+        existing = PlaybackProgress(user_id=user.id, url_hash=payload.url_hash, site_host=host, clean_url=payload.clean_url, title=payload.title, progress_seconds=0 if completed else progress_seconds, duration=payload.duration, completed=completed, client_updated_at=incoming_time)
         db.add(existing)
+        watched_delta = min(progress_seconds, 30.0)
     else:
         stored_time = as_utc(existing.client_updated_at)
         should_update = stored_time is None or incoming_time >= stored_time or progress_seconds > existing.progress_seconds
         if should_update:
+            watched_delta = min(max(0.0, progress_seconds - existing.progress_seconds), 30.0)
             existing.clean_url = payload.clean_url
-            existing.site_host = payload.site_host.lower()
+            existing.site_host = host
             existing.title = payload.title
             existing.progress_seconds = 0 if completed else progress_seconds
             existing.duration = payload.duration
             existing.completed = completed
             existing.client_updated_at = incoming_time
+        else:
+            watched_delta = 0.0
+
+    site_name = next((name for domain, name in SITE_NAMES.items() if host == domain or host.endswith(f".{domain}")), host)
+    insert_site = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
+    site_insert = insert_site(UserSite).values(
+        user_id=user.id,
+        site_host=host,
+        site_name=site_name,
+        last_watched_at=observed_at,
+        watched_seconds=watched_delta,
+    )
+    db.execute(site_insert.on_conflict_do_update(
+        index_elements=[UserSite.user_id, UserSite.site_host],
+        set_={
+            "site_name": site_insert.excluded.site_name,
+            "last_watched_at": case(
+                (UserSite.last_watched_at < observed_at, observed_at),
+                else_=UserSite.last_watched_at,
+            ),
+            "watched_seconds": UserSite.watched_seconds + watched_delta,
+        },
+    ))
 
     db.commit()
     return {"status": "success", "message": "Progress updated"}

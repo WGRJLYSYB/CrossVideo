@@ -17,6 +17,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
+from urllib.parse import urlparse
 
 
 class RegisterRequest(BaseModel):
@@ -43,6 +44,47 @@ class LoginRequest(BaseModel):
 
 class SiteRequest(BaseModel):
     site_host: str = Field(min_length=1, max_length=255, pattern=r"^[A-Za-z0-9.-]+$")
+
+    @field_validator("site_host", mode="before")
+    @classmethod
+    def normalize_site_host(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("site_host must be a string")
+        host = value.strip()
+        if "://" in host or host.startswith("//"):
+            parsed = urlparse(host if "://" in host else f"https:{host}")
+            host = parsed.hostname or ""
+        return host.rstrip(".").lower()
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=50)
+
+
+class SiteInfo(BaseModel):
+    site_host: str
+    site_name: str
+    last_watched_at: datetime
+
+
+class DashboardSiteStat(BaseModel):
+    site_host: str
+    site_name: str
+    video_count: int
+    watched_seconds: float
+
+
+class ActiveVideoInfo(BaseModel):
+    client_id: str
+    site_host: str | None = None
+    title: str
+    play_started_at: datetime | None = None
+
+
+class DashboardResponse(BaseModel):
+    online_device_count: int
+    current_videos: list[ActiveVideoInfo]
+    sites: list[DashboardSiteStat]
 
 
 class TokenResponse(BaseModel):
@@ -166,4 +208,3 @@ class WatchLaterListResponse(BaseModel):
     page: int
     page_size: int
     items: list[WatchLaterItem]
-

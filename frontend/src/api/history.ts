@@ -17,8 +17,16 @@ export interface HistoryQueryParams {
   site_host?: string
 }
 
+export function getRecentPlatformsApi(): Promise<import('@/types').SiteInfo[]> {
+  return apiClient.get('/platforms')
+}
+
 export function getHistoryListApi(params: HistoryQueryParams): Promise<PaginatedResponse<HistoryItem>> {
   return apiClient.get('/history', { params })
+}
+
+export function bulkDeleteHistoryApi(ids: number[]): Promise<{ deleted_count: number }> {
+  return apiClient.post('/history/bulk-delete', { ids })
 }
 
 export function deleteHistoryItemApi(id: number): Promise<{ status: string }> {

@@ -58,6 +58,12 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+export interface SiteInfo {
+  site_host: string
+  site_name: string
+  last_watched_at: string
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string

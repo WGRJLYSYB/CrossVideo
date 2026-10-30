@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.14
+// @version      0.1.15
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -36,7 +36,15 @@ See LICENSE file in repository root for full license text.
     root.id = 'crossvideo-mobile-root';
     document.documentElement.appendChild(root);
 
-    const state = { session: null, timer: null };
+    const state = {
+        session: null,
+        timer: null,
+        realtimeSocket: null,
+        realtimeHeartbeat: null,
+        realtimeReconnect: null,
+        realtimeConnectTimeout: null,
+        realtimeStopped: false,
+    };
     const css = `
         #crossvideo-mobile-root { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18212b; }
         #crossvideo-mobile-root * { box-sizing: border-box; }
@@ -80,6 +88,91 @@ See LICENSE file in repository root for full license text.
 
     const token = () => GM_getValue(TOKEN_KEY, '');
     const apiBase = () => `${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE).replace(/\/+$/, '')}/api/v1`;
+    const DEVICE_ID_KEY = 'crossvideo_device_id';
+    const deviceId = () => {
+        let value = GM_getValue(DEVICE_ID_KEY, '');
+        if (!value) {
+            value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            GM_setValue(DEVICE_ID_KEY, value);
+        }
+        return value;
+    };
+    const sendRealtime = (type, session = state.session) => {
+        const socket = state.realtimeSocket;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify({
+            type,
+            site_host: session?.siteHost,
+            url_hash: session?.urlHash,
+            title: session?.title || '',
+            playing: Boolean(session && !session.video.paused && !session.video.ended),
+        }));
+    };
+    const connectRealtime = () => {
+        if (!token() || !GM_getValue(API_BASE_KEY, '') || state.realtimeStopped) return;
+        if (state.realtimeSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(state.realtimeSocket.readyState)) return;
+        const base = new URL(apiBase(), location.href);
+        base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+        base.pathname = `${base.pathname.replace(/\/api\/v1\/?$/, '')}/api/v1/ws/playback`;
+        const socket = new WebSocket(base.href);
+        state.realtimeSocket = socket;
+        let lastMessageAt = Date.now();
+        state.realtimeConnectTimeout = setTimeout(() => {
+            if (socket.readyState === WebSocket.CONNECTING) socket.close();
+        }, 15000);
+        socket.onopen = () => {
+            clearTimeout(state.realtimeConnectTimeout);
+            state.realtimeConnectTimeout = null;
+            socket.send(JSON.stringify({ type: 'auth', token: token(), client_id: deviceId() }));
+        };
+        socket.onmessage = (event) => {
+            lastMessageAt = Date.now();
+            let message;
+            try { message = JSON.parse(event.data); } catch (_) { return; }
+            if (message.type === 'authenticated') {
+                if (message.access_token) GM_setValue(TOKEN_KEY, message.access_token);
+                sendRealtime(state.session && !state.session.video.paused ? 'play' : 'heartbeat');
+                if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+                state.realtimeHeartbeat = setInterval(() => {
+                    if (Date.now() - lastMessageAt > 120000) {
+                        socket.close();
+                        return;
+                    }
+                    sendRealtime('heartbeat');
+                }, 20000);
+            } else if (message.type === 'pause' && state.session
+                && message.site_host === state.session.siteHost && message.url_hash === state.session.urlHash
+                && !state.session.video.paused) {
+                state.session.video.pause();
+            }
+        };
+        socket.onclose = (event) => {
+            if (state.realtimeConnectTimeout) clearTimeout(state.realtimeConnectTimeout);
+            state.realtimeConnectTimeout = null;
+            if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+            state.realtimeHeartbeat = null;
+            if (state.realtimeSocket === socket) state.realtimeSocket = null;
+            if (event.code === 1008) {
+                GM_deleteValue(TOKEN_KEY);
+                GM_deleteValue(USERNAME_KEY);
+                stopRealtime();
+                return;
+            }
+            if (!state.realtimeStopped && token()) state.realtimeReconnect = setTimeout(connectRealtime, 5000);
+        };
+        socket.onerror = () => socket.close();
+    };
+    const stopRealtime = () => {
+        state.realtimeStopped = true;
+        if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+        if (state.realtimeReconnect) clearTimeout(state.realtimeReconnect);
+        if (state.realtimeConnectTimeout) clearTimeout(state.realtimeConnectTimeout);
+        state.realtimeHeartbeat = null;
+        state.realtimeReconnect = null;
+        state.realtimeConnectTimeout = null;
+        state.realtimeSocket?.close();
+        state.realtimeSocket = null;
+    };
     const PAGE_INFO_REQUEST = 'crossvideo:page-info-request';
     const PAGE_INFO_RESPONSE = 'crossvideo:page-info-response';
     const RESUME_TOAST_REQUEST = 'crossvideo:resume-toast-request';
@@ -153,7 +246,7 @@ See LICENSE file in repository root for full license text.
                     resolve(data);
                 }
                 else {
-                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); }
+                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); stopRealtime(); }
                     reject(new Error(Array.isArray(data.detail) ? data.detail.map((item) => item.msg).join('；') : data.detail || `请求失败（${response.status}）`));
                 }
             },
@@ -172,6 +265,7 @@ See LICENSE file in repository root for full license text.
         else if (url.hostname.includes('bilibili.com')) ['p', 't'].forEach((key) => { if (url.searchParams.get(key)) keep.set(key, url.searchParams.get(key)); });
         else for (const [key, value] of url.searchParams) if (!/^(utm_|spm_|from|ref|source|vd_source)/i.test(key)) keep.append(key, value);
         url.hash = '';
+        url.pathname = url.pathname.replace(/\/+$/, '');
         url.search = keep.toString();
         return url.toString();
     };
@@ -315,6 +409,8 @@ See LICENSE file in repository root for full license text.
                     const result = await request('POST', '/auth/login', { username: data.username, password: data.password });
                     GM_setValue(TOKEN_KEY, result.access_token);
                     GM_setValue(USERNAME_KEY, result.username || data.username);
+                    state.realtimeStopped = false;
+                    connectRealtime();
                     closePanel();
                     notice('登录成功');
                     GM_setValue(MENU_REVISION_KEY, Date.now());
@@ -409,9 +505,11 @@ See LICENSE file in repository root for full license text.
         video.addEventListener('click', () => { session.qualified = true; });
         video.addEventListener('volumechange', () => { session.qualified = true; });
         video.addEventListener('timeupdate', () => { if (!video.paused) played += .25; if (played >= 10) session.qualified = true; });
-        video.addEventListener('pause', () => sync(session));
-        video.addEventListener('ended', () => sync(session));
-        video.addEventListener('play', () => query(session));
+        video.addEventListener('pause', () => { sendRealtime('pause', session); sync(session); });
+        video.addEventListener('ended', () => { sendRealtime('pause', session); sync(session); });
+        video.addEventListener('play', () => { sendRealtime('play', session); query(session); });
+        state.realtimeStopped = false;
+        connectRealtime();
         state.timer = setInterval(() => { if (!video.paused) sync(session); }, 15000);
         await query(session);
     };
@@ -432,7 +530,7 @@ See LICENSE file in repository root for full license text.
     history.pushState = function (...args) { const result = originalPushState.apply(this, args); routeChanged(); return result; };
     history.replaceState = function (...args) { const result = originalReplaceState.apply(this, args); routeChanged(); return result; };
     addEventListener('popstate', routeChanged);
-    addEventListener('beforeunload', () => sync(state.session));
+    addEventListener('beforeunload', () => { sync(state.session); stopRealtime(); });
     new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
     document.addEventListener('loadedmetadata', scan, true);
     setTimeout(scan, 800);

@@ -28,8 +28,14 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layout/AppLayout.vue'),
-      redirect: '/history',
+      redirect: '/dashboard',
       children: [
+        {
+          path: 'dashboard',
+          name: 'dashboard',
+          component: () => import('@/views/DashboardView.vue'),
+          meta: { requiresAuth: true, title: '仪表盘' },
+        },
         {
           path: 'history',
           name: 'history',
@@ -48,11 +54,17 @@ const router = createRouter({
           component: () => import('@/views/watchlater/WatchLaterView.vue'),
           meta: { requiresAuth: true, title: '稍后观看' },
         },
+        {
+          path: 'blocked-sites',
+          name: 'blocked-sites',
+          component: () => import('@/views/BlockedSitesView.vue'),
+          meta: { requiresAuth: true, title: '黑名单管理' },
+        },
       ],
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/history',
+      redirect: '/dashboard',
     },
   ],
 })
@@ -64,7 +76,7 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
-    next({ name: 'history' })
+    next({ name: 'dashboard' })
   } else {
     next()
   }

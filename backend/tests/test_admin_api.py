@@ -197,3 +197,204 @@ def test_admin_watch_later_crud_and_favorite_status():
     del_res = client.delete(f"/api/v1/admin/watchlater/{wl_item['id']}", headers=headers)
     assert del_res.status_code == 200
     assert client.get("/api/v1/admin/watchlater", headers=headers).json()["total"] == 0
+
+
+def test_bulk_delete_is_limited_and_scoped_to_current_user():
+    owner_headers = admin_auth_headers("bulk_owner")
+    other_headers = admin_auth_headers("bulk_other")
+    owner_items = [
+        client.post(
+            "/api/v1/admin/favorites",
+            headers=owner_headers,
+            json={"clean_url": f"https://example.com/{i}", "title": f"Favorite {i}"},
+        ).json()
+        for i in range(2)
+    ]
+    other_item = client.post(
+        "/api/v1/admin/favorites",
+        headers=other_headers,
+        json={"clean_url": "https://other.example/video", "title": "Other user's favorite"},
+    ).json()
+
+    deleted = client.post(
+        "/api/v1/admin/favorites/bulk-delete",
+        headers=owner_headers,
+        json={"ids": [owner_items[0]["id"], other_item["id"], owner_items[0]["id"]]},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted_count"] == 1
+    assert client.get("/api/v1/admin/favorites", headers=owner_headers).json()["total"] == 1
+    assert client.get("/api/v1/admin/favorites", headers=other_headers).json()["total"] == 1
+    too_many = client.post(
+        "/api/v1/admin/favorites/bulk-delete",
+        headers=owner_headers,
+        json={"ids": list(range(1, 52))},
+    )
+    assert too_many.status_code == 422
+
+
+def test_bulk_delete_history_and_watchlater():
+    owner_headers = admin_auth_headers("bulk_lists_owner")
+    other_headers = admin_auth_headers("bulk_lists_other")
+    history_id = client.post(
+        "/api/v1/progress/sync",
+        headers=owner_headers,
+        json={
+            "url_hash": "1" * 64,
+            "clean_url": "https://example.com/history",
+            "title": "History record",
+            "progress_seconds": 10,
+            "duration": 120,
+            "site_host": "example.com",
+        },
+    )
+    assert history_id.status_code == 200
+    own_history = client.get("/api/v1/admin/history", headers=owner_headers).json()["items"][0]["id"]
+    other_history_payload = {
+        "url_hash": "2" * 64,
+        "clean_url": "https://other.example/history",
+        "title": "Other user's history",
+        "progress_seconds": 10,
+        "duration": 120,
+        "site_host": "other.example",
+    }
+    client.post("/api/v1/progress/sync", headers=other_headers, json=other_history_payload)
+    other_history = client.get("/api/v1/admin/history", headers=other_headers).json()["items"][0]["id"]
+
+    deleted_history = client.post(
+        "/api/v1/admin/history/bulk-delete",
+        headers=owner_headers,
+        json={"ids": [own_history, other_history]},
+    )
+    assert deleted_history.json()["deleted_count"] == 1
+    assert client.get("/api/v1/admin/history", headers=other_headers).json()["total"] == 1
+
+    own_later = client.post(
+        "/api/v1/admin/watchlater",
+        headers=owner_headers,
+        json={"clean_url": "https://example.com/later", "title": "Later"},
+    ).json()["id"]
+    other_later = client.post(
+        "/api/v1/admin/watchlater",
+        headers=other_headers,
+        json={"clean_url": "https://other.example/later", "title": "Other later"},
+    ).json()["id"]
+    deleted_later = client.post(
+        "/api/v1/admin/watchlater/bulk-delete",
+        headers=owner_headers,
+        json={"ids": [own_later, other_later]},
+    )
+    assert deleted_later.json()["deleted_count"] == 1
+    assert client.get("/api/v1/admin/watchlater", headers=other_headers).json()["total"] == 1
+
+
+def test_platforms_are_recorded_and_blocklist_accepts_url():
+    headers = admin_auth_headers("site_user")
+    sync = client.post(
+        "/api/v1/progress/sync",
+        headers=headers,
+        json={
+            "url_hash": "e" * 64,
+            "clean_url": "https://www.bilibili.com/video/BV1",
+            "title": "A video",
+            "progress_seconds": 18,
+            "duration": 120,
+            "site_host": "www.bilibili.com",
+        },
+    )
+    assert sync.status_code == 200
+    platforms = client.get("/api/v1/admin/platforms", headers=headers)
+    assert platforms.json()[0]["site_host"] == "www.bilibili.com"
+    assert platforms.json()[0]["site_name"] == "哔哩哔哩"
+
+    blocked = client.post(
+        "/api/v1/admin/blocked-sites",
+        headers=headers,
+        json={"site_host": "https://www.bilibili.com/videos"},
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["site_host"] == "www.bilibili.com"
+    assert client.get("/api/v1/admin/history", headers=headers).json()["total"] == 0
+    removed = client.delete("/api/v1/admin/blocked-sites/www.bilibili.com", headers=headers)
+    assert removed.status_code == 200
+
+
+def test_recent_platform_candidates_are_limited_to_ten():
+    headers = admin_auth_headers("recent_sites_user")
+    for index in range(11):
+        host = f"site{index}.example"
+        client.post(
+            "/api/v1/progress/sync",
+            headers=headers,
+            json={
+                "url_hash": f"{index:064x}",
+                "clean_url": f"https://{host}/video",
+                "title": f"Video {index}",
+                "progress_seconds": 10,
+                "duration": 120,
+                "site_host": host,
+            },
+        )
+
+    platforms = client.get("/api/v1/admin/platforms", headers=headers)
+    assert platforms.status_code == 200
+    assert len(platforms.json()) == 10
+
+
+def test_dashboard_aggregates_sites_and_reports_live_playback():
+    headers = admin_auth_headers("dashboard_user")
+    client.post(
+        "/api/v1/progress/sync",
+        headers=headers,
+        json={
+            "url_hash": "d" * 64,
+            "clean_url": "https://example.com/video",
+            "title": "Dashboard video",
+            "progress_seconds": 18,
+            "duration": 120,
+            "site_host": "example.com",
+        },
+    )
+    response = client.get("/api/v1/admin/dashboard", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["online_device_count"] == 0
+    assert data["current_videos"] == []
+    assert data["sites"] == [{
+        "site_host": "example.com",
+        "site_name": "example.com",
+        "video_count": 1,
+        "watched_seconds": 18.0,
+    }]
+
+
+def test_favorites_and_watchlater_can_filter_by_site():
+    headers = admin_auth_headers("site_filter_user")
+    client.post(
+        "/api/v1/admin/favorites",
+        headers=headers,
+        json={"clean_url": "https://a.example/video", "title": "A", "site_host": "a.example"},
+    )
+    client.post(
+        "/api/v1/admin/favorites",
+        headers=headers,
+        json={"clean_url": "https://b.example/video", "title": "B", "site_host": "b.example"},
+    )
+    client.post(
+        "/api/v1/admin/watchlater",
+        headers=headers,
+        json={"clean_url": "https://a.example/later", "title": "A later", "site_host": "a.example"},
+    )
+    client.post(
+        "/api/v1/admin/watchlater",
+        headers=headers,
+        json={"clean_url": "https://b.example/later", "title": "B later", "site_host": "b.example"},
+    )
+
+    favorites = client.get("/api/v1/admin/favorites", params={"site_host": "a.example"}, headers=headers)
+    watch_later = client.get("/api/v1/admin/watchlater", params={"site_host": "b.example"}, headers=headers)
+    assert favorites.json()["total"] == 1
+    assert favorites.json()["items"][0]["title"] == "A"
+    assert watch_later.json()["total"] == 1
+    assert watch_later.json()["items"][0]["title"] == "B later"

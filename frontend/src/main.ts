@@ -16,6 +16,11 @@ import './assets/main.css'
 
 import App from './App.vue'
 import router from './router'
+import { initializeDevToolsGuard } from './utils/devtoolsGuard'
+
+initializeDevToolsGuard().catch((error: unknown) => {
+  console.error('Failed to initialize the DevTools guard', error)
+})
 
 // Apply theme from localStorage (default: dark)
 const savedTheme = localStorage.getItem('crossvideo_theme') || 'dark'

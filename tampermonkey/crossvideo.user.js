@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.12
+// @version      0.1.13
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -40,6 +40,11 @@ See LICENSE file in repository root for full license text.
         timer: null,
         observer: null,
         routeUrl: location.href,
+        realtimeSocket: null,
+        realtimeHeartbeat: null,
+        realtimeReconnect: null,
+        realtimeConnectTimeout: null,
+        realtimeStopped: false,
     };
 
     const css = `
@@ -94,6 +99,93 @@ See LICENSE file in repository root for full license text.
 
     const token = () => GM_getValue(TOKEN_KEY, '');
     const apiBase = () => `${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE).replace(/\/+$/, '')}/api/v1`;
+    const DEVICE_ID_KEY = 'crossvideo_device_id';
+    const deviceId = () => {
+        let value = GM_getValue(DEVICE_ID_KEY, '');
+        if (!value) {
+            value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            GM_setValue(DEVICE_ID_KEY, value);
+        }
+        return value;
+    };
+    const sendRealtime = (type, session = state.session) => {
+        const socket = state.realtimeSocket;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify({
+            type,
+            site_host: session?.siteHost,
+            url_hash: session?.urlHash,
+            title: session?.title || '',
+            playing: Boolean(session && !session.video.paused && !session.video.ended),
+        }));
+    };
+    const connectRealtime = () => {
+        if (!token() || !GM_getValue(API_BASE_KEY, '') || state.realtimeStopped) return;
+        if (state.realtimeSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(state.realtimeSocket.readyState)) return;
+        const base = new URL(apiBase(), location.href);
+        base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+        base.pathname = `${base.pathname.replace(/\/api\/v1\/?$/, '')}/api/v1/ws/playback`;
+        const socket = new WebSocket(base.href);
+        state.realtimeSocket = socket;
+        let lastMessageAt = Date.now();
+        state.realtimeConnectTimeout = setTimeout(() => {
+            if (socket.readyState === WebSocket.CONNECTING) socket.close();
+        }, 15000);
+        socket.onopen = () => {
+            clearTimeout(state.realtimeConnectTimeout);
+            state.realtimeConnectTimeout = null;
+            socket.send(JSON.stringify({ type: 'auth', token: token(), client_id: deviceId() }));
+        };
+        socket.onmessage = (event) => {
+            lastMessageAt = Date.now();
+            let message;
+            try { message = JSON.parse(event.data); } catch (_) { return; }
+            if (message.type === 'authenticated') {
+                if (message.access_token) GM_setValue(TOKEN_KEY, message.access_token);
+                sendRealtime(state.session && !state.session.video.paused ? 'play' : 'heartbeat');
+                if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+                state.realtimeHeartbeat = setInterval(() => {
+                    if (Date.now() - lastMessageAt > 120000) {
+                        socket.close();
+                        return;
+                    }
+                    sendRealtime('heartbeat');
+                }, 20000);
+            } else if (message.type === 'pause' && state.session
+                && message.site_host === state.session.siteHost && message.url_hash === state.session.urlHash
+                && !state.session.video.paused) {
+                state.session.video.pause();
+            }
+        };
+        socket.onclose = (event) => {
+            if (state.realtimeConnectTimeout) clearTimeout(state.realtimeConnectTimeout);
+            state.realtimeConnectTimeout = null;
+            if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+            state.realtimeHeartbeat = null;
+            if (state.realtimeSocket === socket) state.realtimeSocket = null;
+            if (event.code === 1008) {
+                GM_deleteValue(TOKEN_KEY);
+                GM_deleteValue(USERNAME_KEY);
+                stopRealtime();
+                return;
+            }
+            if (!state.realtimeStopped && token()) {
+                state.realtimeReconnect = setTimeout(connectRealtime, 5000);
+            }
+        };
+        socket.onerror = () => socket.close();
+    };
+    const stopRealtime = () => {
+        state.realtimeStopped = true;
+        if (state.realtimeHeartbeat) clearInterval(state.realtimeHeartbeat);
+        if (state.realtimeReconnect) clearTimeout(state.realtimeReconnect);
+        if (state.realtimeConnectTimeout) clearTimeout(state.realtimeConnectTimeout);
+        state.realtimeHeartbeat = null;
+        state.realtimeReconnect = null;
+        state.realtimeConnectTimeout = null;
+        state.realtimeSocket?.close();
+        state.realtimeSocket = null;
+    };
     const PAGE_INFO_REQUEST = 'crossvideo:page-info-request';
     const PAGE_INFO_RESPONSE = 'crossvideo:page-info-response';
     const RESUME_TOAST_REQUEST = 'crossvideo:resume-toast-request';
@@ -173,7 +265,7 @@ See LICENSE file in repository root for full license text.
                     resolve(data);
                 }
                 else {
-                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); }
+                    if (response.status === 401) { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); stopRealtime(); }
                     reject(new Error(requestErrorMessage(data, response.status)));
                 }
             },
@@ -203,6 +295,7 @@ See LICENSE file in repository root for full license text.
             }
         }
         url.hash = '';
+        url.pathname = url.pathname.replace(/\/+$/, '');
         url.search = keep.toString();
         return url.toString();
     };
@@ -378,6 +471,8 @@ See LICENSE file in repository root for full license text.
         const url = cleanUrl(pageInfo.url);
         const session = { video, routeUrl: location.href, pageUrl: pageInfo.url, cleanUrl: url, urlHash: await sha256(url), title: pageInfo.title || url, siteHost: new URL(pageInfo.url).hostname.toLowerCase(), interacted: false, playedSeconds: 0, qualified: false, restored: false };
         state.session = session;
+        state.realtimeStopped = false;
+        connectRealtime();
         const updateTitle = () => updateSessionPageInfo(session);
         updateTitle();
         const markInteraction = () => { session.interacted = true; };
@@ -387,9 +482,9 @@ See LICENSE file in repository root for full license text.
             if (!video.paused) session.playedSeconds += 0.25;
             if (isCandidate(video) && (session.interacted || session.playedSeconds >= 10)) session.qualified = true;
         });
-        video.addEventListener('pause', () => sync(session));
-        video.addEventListener('ended', () => sync(session));
-        video.addEventListener('play', () => query(session));
+        video.addEventListener('pause', () => { sendRealtime('pause', session); sync(session); });
+        video.addEventListener('ended', () => { sendRealtime('pause', session); sync(session); });
+        video.addEventListener('play', () => { sendRealtime('play', session); query(session); });
         document.addEventListener('visibilitychange', updateTitle);
         const titleObserver = new MutationObserver(updateTitle);
         const titleElement = document.querySelector('title');
@@ -465,6 +560,8 @@ See LICENSE file in repository root for full license text.
                 const result = await request('POST', '/auth/login', { username: data.username, password: data.password });
                 GM_setValue(TOKEN_KEY, result.access_token);
                 GM_setValue(USERNAME_KEY, result.username || data.username);
+                state.realtimeStopped = false;
+                connectRealtime();
                 root.innerHTML = '';
                 GM_setValue(MENU_REVISION_KEY, Date.now());
                 registerMenus();
@@ -575,6 +672,7 @@ See LICENSE file in repository root for full license text.
     const logout = () => {
         GM_setValue(TOKEN_KEY, '');
         GM_setValue(USERNAME_KEY, '');
+        stopRealtime();
         root.innerHTML = '';
         showNotice('已退出登录');
         GM_setValue(MENU_REVISION_KEY, Date.now());
@@ -639,7 +737,7 @@ See LICENSE file in repository root for full license text.
     history.pushState = function (...args) { const result = originalPushState.apply(this, args); routeChanged(); return result; };
     history.replaceState = function (...args) { const result = originalReplaceState.apply(this, args); routeChanged(); return result; };
     window.addEventListener('popstate', routeChanged);
-    window.addEventListener('beforeunload', () => sync(state.session));
+    window.addEventListener('beforeunload', () => { sync(state.session); stopRealtime(); });
     state.observer = new MutationObserver(() => scan());
     state.observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
     document.addEventListener('loadedmetadata', scan, true);

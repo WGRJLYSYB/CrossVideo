@@ -118,3 +118,34 @@ def test_progress_can_be_deleted():
     item = client.get("/api/v1/progress/list", headers=headers).json()["items"][0]
     response = client.delete(f"/api/v1/progress/records/{item['id']}", headers=headers)
     assert response.json()["status"] == "deleted"
+
+
+def test_playback_websocket_pauses_only_earlier_same_video():
+    headers = auth_headers()
+    token = headers["Authorization"].removeprefix("Bearer ")
+    playback = {
+        "site_host": "video.example",
+        "url_hash": "a" * 64,
+        "title": "Same video",
+        "playing": True,
+    }
+
+    with client.websocket_connect("/api/v1/ws/playback") as first:
+        first.send_json({"type": "auth", "token": token, "client_id": "device-1"})
+        assert first.receive_json()["type"] == "authenticated"
+        first.send_json({"type": "play", **playback})
+        assert first.receive_json()["type"] == "heartbeat_ack"
+        dashboard = client.get("/api/v1/admin/dashboard", headers=headers).json()
+        assert dashboard["online_device_count"] == 1
+        assert dashboard["current_videos"][0]["title"] == "Same video"
+
+        with client.websocket_connect("/api/v1/ws/playback") as second:
+            second.send_json({"type": "auth", "token": token, "client_id": "device-2"})
+            assert second.receive_json()["type"] == "authenticated"
+            second.send_json({"type": "play", **playback})
+            assert second.receive_json()["type"] == "heartbeat_ack"
+            pause = first.receive_json()
+            assert pause == {"type": "pause", "site_host": "video.example", "url_hash": "a" * 64}
+            live = client.get("/api/v1/admin/dashboard", headers=headers).json()
+            assert live["online_device_count"] == 2
+            assert [video["title"] for video in live["current_videos"]] == ["Same video"]

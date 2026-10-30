@@ -13,6 +13,7 @@
     "@element-plus/icons-vue": "^2.3.1",
     "@sentry/vue": "^11.9.0",
     "axios": "^1.7.7",
+    "devtools-detect": "^4.0.2",
     "element-plus": "^2.8.3",
     "pinia": "^2.2.2",
     "vue": "^3.5.8",

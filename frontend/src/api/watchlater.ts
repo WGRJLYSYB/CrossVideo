@@ -14,6 +14,7 @@ export interface WatchLaterQueryParams {
   page?: number
   page_size?: number
   search?: string
+  site_host?: string
 }
 
 export interface WatchLaterCreateParams {
@@ -34,4 +35,8 @@ export function addWatchLaterApi(data: WatchLaterCreateParams): Promise<WatchLat
 
 export function deleteWatchLaterApi(id: number): Promise<{ status: string }> {
   return apiClient.delete(`/watchlater/${id}`)
+}
+
+export function bulkDeleteWatchLaterApi(ids: number[]): Promise<{ deleted_count: number }> {
+  return apiClient.post('/watchlater/bulk-delete', { ids })
 }

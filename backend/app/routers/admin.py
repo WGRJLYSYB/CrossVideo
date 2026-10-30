@@ -25,17 +25,24 @@ from sqlalchemy.orm import Session
 
 from ..auth import create_access_token, get_current_user, hash_password, verify_password
 from ..db import get_db
-from ..models import Favorite, PlaybackProgress, User, WatchLater
+from ..models import BlockedSite, Favorite, PlaybackProgress, User, UserSite, WatchLater
+from ..realtime import playback_manager
 from ..schemas import (
     AdminHistoryItem,
     AdminHistoryListResponse,
     AdminUserInfoResponse,
+    ActiveVideoInfo,
+    BulkDeleteRequest,
+    DashboardResponse,
+    DashboardSiteStat,
     FavoriteCreateRequest,
     FavoriteItem,
     FavoriteListResponse,
     LoginRequest,
     RegisterRequest,
+    SiteRequest,
     TokenResponse,
+    SiteInfo,
     WatchLaterCreateRequest,
     WatchLaterItem,
     WatchLaterListResponse,
@@ -62,6 +69,12 @@ def extract_host(url: str, fallback_host: str | None = None) -> str | None:
         return parsed.netloc.lower() if parsed.netloc else None
     except Exception:
         return None
+
+
+def delete_owned_records(db: Session, model, ids: list[int], user_id: int) -> int:
+    result = db.query(model).filter(model.user_id == user_id, model.id.in_(set(ids))).delete(synchronize_session=False)
+    db.commit()
+    return result
 
 
 # ----------------------------------------------------------------------
@@ -136,6 +149,99 @@ def get_admin_profile(user: User = Depends(get_current_user), db: Session = Depe
         favorites_count=favorites_count,
         watch_later_count=watch_later_count,
     )
+
+
+@router.get("/platforms", response_model=list[SiteInfo])
+def list_recent_platforms(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[SiteInfo]:
+    sites = db.scalars(
+        select(UserSite)
+        .where(UserSite.user_id == user.id)
+        .order_by(UserSite.last_watched_at.desc())
+        .limit(10)
+    ).all()
+    return [
+        SiteInfo(site_host=site.site_host, site_name=site.site_name, last_watched_at=as_utc(site.last_watched_at))
+        for site in sites
+    ]
+
+
+@router.get("/dashboard", response_model=DashboardResponse)
+def get_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> DashboardResponse:
+    site_stats = db.execute(
+        select(
+            UserSite.site_host,
+            UserSite.site_name,
+            func.count(PlaybackProgress.id),
+            func.coalesce(UserSite.watched_seconds, 0.0),
+        )
+        .outerjoin(
+            PlaybackProgress,
+            (PlaybackProgress.user_id == UserSite.user_id)
+            & (PlaybackProgress.site_host == UserSite.site_host),
+        )
+        .where(UserSite.user_id == user.id)
+        .group_by(UserSite.id, UserSite.site_host, UserSite.site_name, UserSite.watched_seconds)
+        .order_by(UserSite.last_watched_at.desc())
+    ).all()
+    connections = playback_manager.snapshot(user.id)
+    active_videos = [
+        ActiveVideoInfo(
+            client_id=connection.client_id,
+            site_host=connection.site_host,
+            title=connection.title,
+            play_started_at=as_utc(connection.play_started_at),
+        )
+        for connection in connections
+        if connection.playing
+    ]
+    return DashboardResponse(
+        online_device_count=len({connection.client_id for connection in connections}),
+        current_videos=active_videos,
+        sites=[
+            DashboardSiteStat(
+                site_host=host,
+                site_name=name,
+                video_count=count,
+                watched_seconds=seconds,
+            )
+            for host, name, count, seconds in site_stats
+        ],
+    )
+
+
+@router.get("/blocked-sites")
+def list_admin_blocked_sites(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, list[str]]:
+    return {
+        "items": list(db.scalars(
+            select(BlockedSite.site_host).where(BlockedSite.user_id == user.id).order_by(BlockedSite.site_host)
+        ).all())
+    }
+
+
+@router.post("/blocked-sites", status_code=status.HTTP_200_OK)
+def add_admin_blocked_site(payload: SiteRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
+    host = payload.site_host
+    blocked = db.scalar(select(BlockedSite).where(BlockedSite.user_id == user.id, BlockedSite.site_host == host))
+    if blocked is None:
+        db.add(BlockedSite(user_id=user.id, site_host=host))
+        db.query(PlaybackProgress).filter(
+            PlaybackProgress.user_id == user.id,
+            PlaybackProgress.site_host == host,
+        ).delete(synchronize_session=False)
+        db.commit()
+    return {"status": "blocked", "site_host": host}
+
+
+@router.delete("/blocked-sites/{site_host}")
+def delete_admin_blocked_site(site_host: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
+    normalized_host = SiteRequest(site_host=site_host).site_host
+    blocked = db.scalar(select(BlockedSite).where(
+        BlockedSite.user_id == user.id, BlockedSite.site_host == normalized_host
+    ))
+    if blocked is not None:
+        db.delete(blocked)
+        db.commit()
+    return {"status": "unblocked", "site_host": normalized_host}
 
 
 # ----------------------------------------------------------------------
@@ -221,6 +327,11 @@ def delete_history_item(
     return {"status": "deleted", "id": str(history_id)}
 
 
+@router.post("/history/bulk-delete")
+def bulk_delete_history(payload: BulkDeleteRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    return {"deleted_count": delete_owned_records(db, PlaybackProgress, payload.ids, user.id)}
+
+
 @router.delete("/history", status_code=status.HTTP_200_OK)
 def clear_all_history(
     user: User = Depends(get_current_user),
@@ -240,10 +351,13 @@ def list_favorites(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     search: str | None = Query(default=None, max_length=200),
+    site_host: str | None = Query(default=None, max_length=255),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FavoriteListResponse:
     base_query = select(Favorite).where(Favorite.user_id == user.id)
+    if site_host and site_host.strip():
+        base_query = base_query.where(Favorite.site_host.ilike(f"%{site_host.strip().lower()}%"))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         base_query = base_query.where(Favorite.title.ilike(pattern) | Favorite.clean_url.ilike(pattern))
@@ -343,6 +457,11 @@ def delete_favorite(
     return {"status": "deleted", "id": str(fav_id)}
 
 
+@router.post("/favorites/bulk-delete")
+def bulk_delete_favorites(payload: BulkDeleteRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    return {"deleted_count": delete_owned_records(db, Favorite, payload.ids, user.id)}
+
+
 # ----------------------------------------------------------------------
 # 4. 稍后观看 (Watch Later)
 # ----------------------------------------------------------------------
@@ -352,10 +471,13 @@ def list_watch_later(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     search: str | None = Query(default=None, max_length=200),
+    site_host: str | None = Query(default=None, max_length=255),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> WatchLaterListResponse:
     base_query = select(WatchLater).where(WatchLater.user_id == user.id)
+    if site_host and site_host.strip():
+        base_query = base_query.where(WatchLater.site_host.ilike(f"%{site_host.strip().lower()}%"))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         base_query = base_query.where(WatchLater.title.ilike(pattern) | WatchLater.clean_url.ilike(pattern))
@@ -456,3 +578,8 @@ def delete_watch_later(
     db.delete(wl)
     db.commit()
     return {"status": "deleted", "id": str(wl_id)}
+
+
+@router.post("/watchlater/bulk-delete")
+def bulk_delete_watch_later(payload: BulkDeleteRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    return {"deleted_count": delete_owned_records(db, WatchLater, payload.ids, user.id)}

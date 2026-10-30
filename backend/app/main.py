@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from . import realtime
 from .routers import admin, auth, progress
 
 
@@ -56,6 +57,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(progress.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(realtime.router)
 
 
 @app.get("/health")

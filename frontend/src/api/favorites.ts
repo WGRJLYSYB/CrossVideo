@@ -14,6 +14,7 @@ export interface FavoriteQueryParams {
   page?: number
   page_size?: number
   search?: string
+  site_host?: string
 }
 
 export interface FavoriteCreateParams {
@@ -34,4 +35,8 @@ export function addFavoriteApi(data: FavoriteCreateParams): Promise<FavoriteItem
 
 export function deleteFavoriteApi(id: number): Promise<{ status: string }> {
   return apiClient.delete(`/favorites/${id}`)
+}
+
+export function bulkDeleteFavoritesApi(ids: number[]): Promise<{ deleted_count: number }> {
+  return apiClient.post('/favorites/bulk-delete', { ids })
 }

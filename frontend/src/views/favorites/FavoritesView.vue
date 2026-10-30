@@ -22,6 +22,15 @@ See LICENSE file in repository root for full license text.
           @keyup.enter="loadData(1)"
           id="input-favorites-search"
         />
+        <el-select v-model="selectedHost" placeholder="全部平台" clearable class="!w-52" @change="loadData(1)">
+          <el-option label="全部平台" value="" />
+          <el-option
+            v-for="site in platforms"
+            :key="site.site_host"
+            :label="`${site.site_name || site.site_host}`"
+            :value="site.site_host"
+          />
+        </el-select>
         <el-button type="primary" :icon="Search" @click="loadData(1)" id="btn-favorites-search">
           搜索
         </el-button>
@@ -32,6 +41,16 @@ See LICENSE file in repository root for full license text.
 
       <div class="text-xs text-slate-400">
         已收藏 <span class="font-semibold text-amber-300">{{ total }}</span> 部精彩视频
+        <el-button
+          class="!ml-3"
+          type="danger"
+          :icon="Delete"
+          :disabled="selectedIds.length === 0 || loading || bulkDeleting"
+          :loading="bulkDeleting"
+          @click="handleBulkDelete"
+        >
+          删除所选 ({{ selectedIds.length }})
+        </el-button>
       </div>
     </div>
 
@@ -39,11 +58,13 @@ See LICENSE file in repository root for full license text.
     <div class="glass-panel rounded-2xl overflow-hidden shadow-xl border border-slate-800">
       <el-table
         :data="items"
-        v-loading="loading"
+        v-loading="loading || bulkDeleting"
+        @selection-change="handleSelectionChange"
         empty-text="暂无收藏视频，快去历史记录添加吧"
         style="width: 100%"
         class="custom-table"
       >
+        <el-table-column type="selection" width="48" :selectable="() => !bulkDeleting && !loading" />
         <!-- Platform & Title -->
         <el-table-column label="视频内容" min-width="320">
           <template #default="{ row }">
@@ -100,6 +121,7 @@ See LICENSE file in repository root for full license text.
                   :type="row.is_watch_later ? 'primary' : 'default'"
                   plain
                   :icon="row.is_watch_later ? VideoCameraFilled : VideoCamera"
+                  :disabled="loading || bulkDeleting"
                   circle
                   @click="handleAddToWatchLater(row)"
                 />
@@ -112,6 +134,7 @@ See LICENSE file in repository root for full license text.
                   type="danger"
                   plain
                   :icon="Delete"
+                  :disabled="loading || bulkDeleting"
                   circle
                   class="hover:!bg-rose-500/20"
                   @click="handleDelete(row)"
@@ -133,7 +156,7 @@ See LICENSE file in repository root for full license text.
           :page-sizes="[10, 20, 50]"
           :total="total"
           background
-          layout="sizes, prev, pager, next, jumper"
+          layout="sizes, first, prev, pager, next, last, jumper"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
@@ -147,11 +170,12 @@ import { ref, onMounted } from 'vue'
 import { Search, Refresh, Delete, VideoCamera, VideoCameraFilled, TopRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PlatformBadge from '@/components/PlatformBadge.vue'
-import { getFavoritesListApi, deleteFavoriteApi } from '@/api/favorites'
+import { getFavoritesListApi, deleteFavoriteApi, bulkDeleteFavoritesApi } from '@/api/favorites'
+import { getRecentPlatformsApi } from '@/api/history'
 import { addWatchLaterApi } from '@/api/watchlater'
 import { useAuthStore } from '@/stores/auth'
 import { formatDuration, formatDate } from '@/utils/format'
-import type { FavoriteItem } from '@/types'
+import type { FavoriteItem, SiteInfo } from '@/types'
 
 const authStore = useAuthStore()
 
@@ -161,15 +185,21 @@ const page = ref(1)
 const pageSize = ref(10)
 const loading = ref(false)
 const searchQuery = ref('')
+const selectedHost = ref('')
+const platforms = ref<SiteInfo[]>([])
+const selectedIds = ref<number[]>([])
+const bulkDeleting = ref(false)
 
 async function loadData(targetPage = page.value) {
   loading.value = true
   page.value = targetPage
+  selectedIds.value = []
   try {
     const res = await getFavoritesListApi({
       page: page.value,
       page_size: pageSize.value,
       search: searchQuery.value || undefined,
+      site_host: selectedHost.value || undefined,
     })
     items.value = res.items
     total.value = res.total
@@ -180,6 +210,7 @@ async function loadData(targetPage = page.value) {
 
 function resetFilters() {
   searchQuery.value = ''
+  selectedHost.value = ''
   loadData(1)
 }
 
@@ -190,6 +221,37 @@ function handleSizeChange(size: number) {
 
 function handleCurrentChange(p: number) {
   loadData(p)
+}
+
+function handleSelectionChange(selection: FavoriteItem[]) {
+  selectedIds.value = selection.map((item) => item.id)
+}
+
+async function handleBulkDelete() {
+  if (bulkDeleting.value || loading.value || selectedIds.value.length === 0) return
+  const ids = [...new Set(selectedIds.value)].slice(0, 50)
+  bulkDeleting.value = true
+  try {
+    await ElMessageBox.confirm(`确定取消选中的 ${ids.length} 条收藏吗？`, '批量删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    bulkDeleting.value = false
+    return
+  }
+  try {
+    const result = await bulkDeleteFavoritesApi(ids)
+    selectedIds.value = []
+    ElMessage.success(`已取消 ${result.deleted_count} 条收藏`)
+    await loadData()
+    await authStore.fetchProfile()
+  } catch {
+    // handled by axios interceptor
+  } finally {
+    bulkDeleting.value = false
+  }
 }
 
 async function handleAddToWatchLater(row: FavoriteItem) {
@@ -231,5 +293,10 @@ async function handleDelete(row: FavoriteItem) {
 
 onMounted(() => {
   loadData()
+  getRecentPlatformsApi().then((sites) => {
+    platforms.value = sites
+  }).catch(() => {
+    // handled by axios interceptor
+  })
 })
 </script>

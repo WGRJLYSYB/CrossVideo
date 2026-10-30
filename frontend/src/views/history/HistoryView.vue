@@ -30,11 +30,12 @@ See LICENSE file in repository root for full license text.
           @change="loadData(1)"
         >
           <el-option label="全部平台" value="" />
-          <el-option label="Bilibili" value="bilibili.com" />
-          <el-option label="YouTube" value="youtube.com" />
-          <el-option label="腾讯视频" value="v.qq.com" />
-          <el-option label="爱奇艺" value="iqiyi.com" />
-          <el-option label="优酷" value="youku.com" />
+          <el-option
+            v-for="site in platforms"
+            :key="site.site_host"
+            :label="`${site.site_name || site.site_host}`"
+            :value="site.site_host"
+          />
         </el-select>
         <el-button type="primary" :icon="Search" @click="loadData(1)" id="btn-history-search">
           搜索
@@ -49,10 +50,19 @@ See LICENSE file in repository root for full license text.
           type="danger"
           plain
           :icon="Delete"
-          :disabled="total === 0"
+          :disabled="total === 0 || loading || bulkDeleting"
           @click="handleClearAll"
         >
           清空历史
+        </el-button>
+        <el-button
+          type="danger"
+          :icon="Delete"
+          :disabled="selectedIds.length === 0 || loading || bulkDeleting"
+          :loading="bulkDeleting"
+          @click="handleBulkDelete"
+        >
+          删除所选 ({{ selectedIds.length }})
         </el-button>
       </div>
     </div>
@@ -61,11 +71,13 @@ See LICENSE file in repository root for full license text.
     <div class="glass-panel rounded-2xl overflow-hidden shadow-xl border border-slate-800">
       <el-table
         :data="items"
-        v-loading="loading"
+        v-loading="loading || bulkDeleting"
+        @selection-change="handleSelectionChange"
         empty-text="暂无观看历史记录"
         style="width: 100%"
         class="custom-table"
       >
+        <el-table-column type="selection" width="48" :selectable="() => !bulkDeleting && !loading" />
         <!-- Platform & Title -->
         <el-table-column label="视频内容" min-width="280">
           <template #default="{ row }">
@@ -134,6 +146,7 @@ See LICENSE file in repository root for full license text.
                   :type="row.is_favorite ? 'warning' : 'default'"
                   plain
                   :icon="row.is_favorite ? StarFilled : Star"
+                  :disabled="loading || bulkDeleting"
                   circle
                   @click="handleToggleFavorite(row)"
                 />
@@ -146,6 +159,7 @@ See LICENSE file in repository root for full license text.
                   :type="row.is_watch_later ? 'primary' : 'default'"
                   plain
                   :icon="row.is_watch_later ? VideoCameraFilled : VideoCamera"
+                  :disabled="loading || bulkDeleting"
                   circle
                   @click="handleAddToWatchLater(row)"
                 />
@@ -158,6 +172,7 @@ See LICENSE file in repository root for full license text.
                   type="danger"
                   plain
                   :icon="Delete"
+                  :disabled="loading || bulkDeleting"
                   circle
                   class="hover:!bg-rose-500/20"
                   @click="handleDelete(row)"
@@ -179,7 +194,7 @@ See LICENSE file in repository root for full license text.
           :page-sizes="[10, 20, 50]"
           :total="total"
           background
-          layout="sizes, prev, pager, next, jumper"
+          layout="sizes, first, prev, pager, next, last, jumper"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
@@ -202,12 +217,12 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PlatformBadge from '@/components/PlatformBadge.vue'
-import { getHistoryListApi, deleteHistoryItemApi, clearHistoryApi } from '@/api/history'
+import { getHistoryListApi, deleteHistoryItemApi, clearHistoryApi, getRecentPlatformsApi, bulkDeleteHistoryApi } from '@/api/history'
 import { addFavoriteApi } from '@/api/favorites'
 import { addWatchLaterApi } from '@/api/watchlater'
 import { useAuthStore } from '@/stores/auth'
 import { formatDuration, formatDate, formatProgressPercent } from '@/utils/format'
-import type { HistoryItem } from '@/types'
+import type { HistoryItem, SiteInfo } from '@/types'
 
 const authStore = useAuthStore()
 
@@ -218,10 +233,14 @@ const pageSize = ref(10)
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedHost = ref('')
+const platforms = ref<SiteInfo[]>([])
+const selectedIds = ref<number[]>([])
+const bulkDeleting = ref(false)
 
 async function loadData(targetPage = page.value) {
   loading.value = true
   page.value = targetPage
+  selectedIds.value = []
   try {
     const res = await getHistoryListApi({
       page: page.value,
@@ -249,6 +268,37 @@ function handleSizeChange(size: number) {
 
 function handleCurrentChange(p: number) {
   loadData(p)
+}
+
+function handleSelectionChange(selection: HistoryItem[]) {
+  selectedIds.value = selection.map((item) => item.id)
+}
+
+async function handleBulkDelete() {
+  if (bulkDeleting.value || loading.value || selectedIds.value.length === 0) return
+  const ids = [...new Set(selectedIds.value)].slice(0, 50)
+  bulkDeleting.value = true
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 条观看历史吗？`, '批量删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    bulkDeleting.value = false
+    return
+  }
+  try {
+    const result = await bulkDeleteHistoryApi(ids)
+    selectedIds.value = []
+    ElMessage.success(`已删除 ${result.deleted_count} 条记录`)
+    await loadData()
+    await authStore.fetchProfile()
+  } catch {
+    // handled by axios interceptor
+  } finally {
+    bulkDeleting.value = false
+  }
 }
 
 async function handleToggleFavorite(row: HistoryItem) {
@@ -323,5 +373,10 @@ async function handleClearAll() {
 
 onMounted(() => {
   loadData()
+  getRecentPlatformsApi().then((sites) => {
+    platforms.value = sites
+  }).catch(() => {
+    // handled by axios interceptor
+  })
 })
 </script>

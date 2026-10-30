@@ -59,3 +59,11 @@ Caddy is the only public application entry point. It proxies `/api/*` to FastAPI
 For a server IP, Caddy can attempt automatic HTTPS when ports 80 and 443 are publicly reachable. Public CA support for IP certificates varies; a real domain name is the most portable option. If Caddy falls back to its internal CA, browsers will require trusting that CA manually.
 
 Authenticated users can block a website from the userscript menu. Blocking removes that user's existing records for the exact hostname and causes future sync requests from that hostname to be ignored.
+
+## Playback coordination and admin DevTools guard
+
+The playback WebSocket is `/api/v1/ws/playback`; this deployment runs one Uvicorn worker, so live device state is held in that process and connections without heartbeats are closed after five minutes. If the API is scaled to multiple workers or replicas, shared Redis Pub/Sub/state is needed so pause commands reach every worker.
+
+The production admin UI uses `devtools-detect` to obscure the dashboard while DevTools appears open. Vite development mode disables the guard automatically. To disable it in another build, set `VITE_DISABLE_DEVTOOLS_GUARD=true`. Detection is only a deterrent, not a security boundary; the upstream library notes possible false positives.
+
+Successful progress syncs update each user's `user_sites` record and the ten most recently watched sites are offered as filters across history, favorites, and watch-later. Dashboard watch time is an estimate based on progress advances; it is not a browser-level time tracker. Bulk delete endpoints accept 1–50 IDs and only delete records owned by the authenticated user. The admin blocklist accepts a hostname or URL and removes matching history records when a site is added.

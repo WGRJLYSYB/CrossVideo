@@ -34,6 +34,7 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     progress: Mapped[list["PlaybackProgress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     blocked_sites: Mapped[list["BlockedSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    site_visits: Mapped[list["UserSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     favorites: Mapped[list["Favorite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     watch_later: Mapped[list["WatchLater"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
@@ -66,6 +67,19 @@ class BlockedSite(Base):
     site_host: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
     user: Mapped[User] = relationship(back_populates="blocked_sites")
+
+
+class UserSite(Base):
+    __tablename__ = "user_sites"
+    __table_args__ = (Index("idx_user_site_host", "user_id", "site_host", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    site_host: Mapped[str] = mapped_column(String(255))
+    site_name: Mapped[str] = mapped_column(String(255))
+    last_watched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    watched_seconds: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    user: Mapped[User] = relationship(back_populates="site_visits")
 
 
 class Favorite(Base):
