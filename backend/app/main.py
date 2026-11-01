@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from . import realtime
-from .routers import admin, auth, progress
+from .routers import admin, ai, auth, progress
 
 
 @asynccontextmanager
@@ -34,8 +34,8 @@ settings = get_settings()
 if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
-        traces_sample_rate=1.0,
-        profile_session_sample_rate=1.0,
+        traces_sample_rate=0.1,
+        profile_session_sample_rate=0.1,
         profile_lifecycle="trace",
     )
 app = FastAPI(
@@ -55,9 +55,12 @@ app.add_middleware(
     expose_headers=["X-Access-Token"],
 )
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1/admin")
 app.include_router(progress.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
-app.include_router(realtime.router)
+app.include_router(ai.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1/admin")
+app.include_router(realtime.router, prefix="/api/v1")
 
 
 @app.get("/health")

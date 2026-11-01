@@ -45,6 +45,10 @@ The production database is PostgreSQL. Alembic manages all schema changes. The C
 
 Access tokens are valid for 30 days by default and are renewed on each authenticated API response. Clients should save the `X-Access-Token` response header; the web admin and both userscripts do this automatically. Configure `CROSSVIDEO_ACCESS_TOKEN_EXPIRE_MINUTES` to override the lifetime.
 
+Account security adds a server-verified click-order CAPTCHA to login and registration, TOTP two-factor authentication, email verification, and password reset. Configure `CROSSVIDEO_SMTP_HOST`, `CROSSVIDEO_SMTP_PORT`, `CROSSVIDEO_SMTP_USERNAME`, `CROSSVIDEO_SMTP_PASSWORD`, `CROSSVIDEO_SMTP_FROM_EMAIL`, and `CROSSVIDEO_SMTP_STARTTLS` to enable email delivery. Set `CROSSVIDEO_FRONTEND_BASE_URL` to the public frontend base ending in `/admin`, so verification links return to the correct app. The self-hosted CAPTCHA is a basic bot deterrent, not a robust replacement for a commercial risk-based CAPTCHA.
+
+The film/TV discussion assistant uses the DeepSeek chat-completions API. Configure `CROSSVIDEO_DEEPSEEK_API_KEY`, and optionally `CROSSVIDEO_DEEPSEEK_BASE_URL` and `CROSSVIDEO_DEEPSEEK_MODEL`. `CROSSVIDEO_MONTHLY_AI_TOKEN_QUOTA` defaults to 1,000 tokens per account per UTC calendar month. The service uses provider-reported token counts, reserves quota while requests are in flight, persists a single conversation per user, and runs an additional topic-classification request before generating a response.
+
 ## Docker
 
 ```bash
@@ -67,3 +71,5 @@ The playback WebSocket is `/api/v1/ws/playback`; this deployment runs one Uvicor
 The production admin UI uses `devtools-detect` to obscure the dashboard while DevTools appears open. Vite development mode disables the guard automatically. To disable it in another build, set `VITE_DISABLE_DEVTOOLS_GUARD=true`. Detection is only a deterrent, not a security boundary; the upstream library notes possible false positives.
 
 Successful progress syncs update each user's `user_sites` record and the ten most recently watched sites are offered as filters across history, favorites, and watch-later. Dashboard watch time is an estimate based on progress advances; it is not a browser-level time tracker. Bulk delete endpoints accept 1–50 IDs and only delete records owned by the authenticated user. The admin blocklist accepts a hostname or URL and removes matching history records when a site is added.
+
+On the first progress sync for a site, the API schedules a bounded homepage-title check in a FastAPI background task. The result is stored as the site's display name when available, and `title_fetch_attempted` prevents subsequent syncs from repeating the check. Requests are limited to public IP addresses, use short timeouts, and do not follow redirects. This in-process task is best-effort; deployments that need durable retries should move it to a persistent task queue.

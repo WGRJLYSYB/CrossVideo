@@ -26,6 +26,24 @@ const router = createRouter({
       meta: { requiresAuth: false, title: '注册' },
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/auth/ForgotPasswordView.vue'),
+      meta: { requiresAuth: false, title: '找回密码' },
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/auth/ResetPasswordView.vue'),
+      meta: { requiresAuth: false, title: '重置密码' },
+    },
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/auth/VerifyEmailView.vue'),
+      meta: { requiresAuth: false, title: '邮箱激活' },
+    },
+    {
       path: '/',
       component: () => import('@/layout/AppLayout.vue'),
       redirect: '/dashboard',
@@ -59,6 +77,12 @@ const router = createRouter({
           name: 'blocked-sites',
           component: () => import('@/views/BlockedSitesView.vue'),
           meta: { requiresAuth: true, title: '黑名单管理' },
+        },
+        {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { requiresAuth: true, title: '设置' },
         },
       ],
     },

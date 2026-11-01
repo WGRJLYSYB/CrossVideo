@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 30
     database_url: str = "postgresql+psycopg://crossvideo:crossvideo@localhost:5432/crossvideo"
     cors_origins: list[str] = ["*"]
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    frontend_base_url: str = "http://localhost:5173/admin"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+    monthly_ai_token_quota: int = 1000
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CROSSVIDEO_", extra="ignore")
 

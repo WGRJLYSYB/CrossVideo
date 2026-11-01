@@ -42,7 +42,24 @@ def verify_password(password: str, hashed_password: str) -> bool:
 def create_access_token(user_id: int) -> str:
     settings = get_settings()
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    return jwt.encode({"sub": str(user_id), "exp": expires_at}, settings.secret_key, algorithm="HS256")
+    return jwt.encode({"sub": str(user_id), "purpose": "access", "exp": expires_at}, settings.secret_key, algorithm="HS256")
+
+
+def create_two_factor_challenge(user_id: int) -> str:
+    settings = get_settings()
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    return jwt.encode(
+        {"sub": str(user_id), "purpose": "two_factor", "exp": expires_at},
+        settings.secret_key,
+        algorithm="HS256",
+    )
+
+
+def decode_two_factor_challenge(token: str) -> int:
+    payload = jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
+    if payload.get("purpose") != "two_factor":
+        raise JWTError("invalid challenge purpose")
+    return int(payload.get("sub", ""))
 
 
 def get_current_user(
@@ -53,6 +70,8 @@ def get_current_user(
     credentials_error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
     try:
         payload = jwt.decode(credentials.credentials, get_settings().secret_key, algorithms=["HS256"])
+        if payload.get("purpose", "access") != "access":
+            raise JWTError("invalid access token purpose")
         user_id = int(payload.get("sub", ""))
     except (JWTError, TypeError, ValueError):
         raise credentials_error from None

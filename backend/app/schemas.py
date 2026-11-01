@@ -15,15 +15,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from datetime import datetime
-
 from pydantic import BaseModel, Field, field_validator
+from pydantic import EmailStr
 from urllib.parse import urlparse
+
+
+class CaptchaClick(BaseModel):
+    x: float = Field(ge=0, le=360)
+    y: float = Field(ge=0, le=140)
 
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^\S+$")
     password: str = Field(min_length=8, max_length=128)
     confirm_password: str = Field(min_length=8, max_length=128)
+    captcha_id: str = Field(min_length=20, max_length=64)
+    captcha_clicks: list[CaptchaClick] = Field(min_length=2, max_length=2)
 
     @field_validator("password")
     @classmethod
@@ -40,6 +47,81 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^\S+$")
     password: str = Field(min_length=1, max_length=128)
+    captcha_id: str = Field(min_length=20, max_length=64)
+    captcha_clicks: list[CaptchaClick] = Field(min_length=2, max_length=2)
+
+
+class LoginResponse(BaseModel):
+    access_token: str | None = None
+    token_type: str = "bearer"
+    username: str
+    requires_2fa: bool = False
+    challenge_token: str | None = None
+
+
+class TwoFactorLoginRequest(BaseModel):
+    challenge_token: str = Field(min_length=20, max_length=2048)
+    code: str = Field(min_length=6, max_length=8)
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_has_letters_and_numbers(cls, value: str) -> str:
+        if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+            raise ValueError("password must contain both letters and numbers")
+        return value
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_has_letters_and_numbers(cls, value: str) -> str:
+        if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+            raise ValueError("password must contain both letters and numbers")
+        return value
+
+
+class TotpCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class TotpDisableRequest(TotpCodeRequest):
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AIChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class AIChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AIChatHistoryResponse(BaseModel):
+    messages: list[AIChatMessage]
+    month: str
+    used_tokens: int
+    monthly_token_quota: int
+    remaining_tokens: int
+    ai_available: bool
 
 
 class SiteRequest(BaseModel):

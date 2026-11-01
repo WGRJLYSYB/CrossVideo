@@ -29,9 +29,11 @@ See LICENSE file in repository root for full license text.
     <section class="glass-panel overflow-hidden rounded-2xl">
       <el-table :data="sites" v-loading="loading" empty-text="暂无被拉黑的网站" style="width: 100%">
         <el-table-column label="网站域名" min-width="240">
-          <template #default="{ row }">
-            <PlatformBadge :site-host="row" />
-          </template>
+            <template #default="{ row }">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border text-indigo-400 bg-indigo-500/10 border-indigo-500/30">
+                    {{ row }}
+                </span>
+            </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">

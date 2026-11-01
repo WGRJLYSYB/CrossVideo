@@ -20,17 +20,15 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import create_access_token, get_current_user, hash_password, verify_password
+from ..auth import get_current_user
 from ..db import get_db
 from ..models import BlockedSite, Favorite, PlaybackProgress, User, UserSite, WatchLater
 from ..realtime import playback_manager
 from ..schemas import (
     AdminHistoryItem,
     AdminHistoryListResponse,
-    AdminUserInfoResponse,
     ActiveVideoInfo,
     BulkDeleteRequest,
     DashboardResponse,
@@ -38,10 +36,7 @@ from ..schemas import (
     FavoriteCreateRequest,
     FavoriteItem,
     FavoriteListResponse,
-    LoginRequest,
-    RegisterRequest,
     SiteRequest,
-    TokenResponse,
     SiteInfo,
     WatchLaterCreateRequest,
     WatchLaterItem,
@@ -75,80 +70,6 @@ def delete_owned_records(db: Session, model, ids: list[int], user_id: int) -> in
     result = db.query(model).filter(model.user_id == user_id, model.id.in_(set(ids))).delete(synchronize_session=False)
     db.commit()
     return result
-
-
-# ----------------------------------------------------------------------
-# 1. 认证接口 (Authentication)
-# ----------------------------------------------------------------------
-
-@router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-def admin_register(payload: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, str]:
-    try:
-        payload.validate_confirmation()
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
-
-    if db.scalar(select(User).where(User.username == payload.username)) is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already exists")
-
-    user = User(username=payload.username, hashed_password=hash_password(payload.password))
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already exists") from None
-    return {"message": "Admin user registered successfully"}
-
-
-@router.post("/auth/login", response_model=TokenResponse)
-def admin_login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = db.scalar(select(User).where(User.username == payload.username))
-    now = datetime.now(UTC)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    locked_until = as_utc(user.locked_until)
-    if locked_until and locked_until > now:
-        retry_after = int((locked_until - now).total_seconds()) + 1
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"too many login attempts; retry in {retry_after} seconds",
-            headers={"Retry-After": str(retry_after)},
-        )
-    if not verify_password(payload.password, user.hashed_password):
-        user.failed_login_attempts += 1
-        delay = min(60, 2 ** max(0, user.failed_login_attempts - 1))
-        user.locked_until = now + timedelta(seconds=delay)
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"incorrect username or password; retry in {delay} seconds",
-            headers={"Retry-After": str(delay), "WWW-Authenticate": "Bearer"},
-        )
-    user.failed_login_attempts = 0
-    user.locked_until = None
-    db.commit()
-    return TokenResponse(access_token=create_access_token(user.id), username=user.username)
-
-
-@router.get("/auth/me", response_model=AdminUserInfoResponse)
-def get_admin_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> AdminUserInfoResponse:
-    history_count = db.scalar(select(func.count(PlaybackProgress.id)).where(PlaybackProgress.user_id == user.id)) or 0
-    favorites_count = db.scalar(select(func.count(Favorite.id)).where(Favorite.user_id == user.id)) or 0
-    watch_later_count = db.scalar(select(func.count(WatchLater.id)).where(WatchLater.user_id == user.id)) or 0
-
-    return AdminUserInfoResponse(
-        id=user.id,
-        username=user.username,
-        created_at=as_utc(user.created_at),
-        history_count=history_count,
-        favorites_count=favorites_count,
-        watch_later_count=watch_later_count,
-    )
 
 
 @router.get("/platforms", response_model=list[SiteInfo])

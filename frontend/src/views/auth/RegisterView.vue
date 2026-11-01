@@ -70,6 +70,8 @@ See LICENSE file in repository root for full license text.
             />
           </el-form-item>
 
+          <CaptchaChallenge ref="captchaRef" />
+
           <div class="mt-8">
             <el-button
               type="primary"
@@ -79,7 +81,7 @@ See LICENSE file in repository root for full license text.
               @click="handleRegister"
               id="btn-register"
             >
-              完成注册并登录
+              完成注册
             </el-button>
           </div>
         </el-form>
@@ -105,6 +107,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { VideoPlay } from '@element-plus/icons-vue'
+import CaptchaChallenge from '@/components/CaptchaChallenge.vue'
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
@@ -112,6 +115,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
+const captchaRef = ref<InstanceType<typeof CaptchaChallenge>>()
 const loading = ref(false)
 
 const form = reactive({
@@ -154,6 +158,11 @@ const rules = reactive<FormRules>({
 
 async function handleRegister() {
   if (!formRef.value) return
+  const captcha = captchaRef.value?.getSubmission()
+  if (!captcha) {
+    ElMessage.warning('请先按顺序完成图形验证')
+    return
+  }
   await formRef.value.validate(async (valid) => {
     if (!valid) return
     loading.value = true
@@ -162,16 +171,14 @@ async function handleRegister() {
         username: form.username,
         password: form.password,
         confirm_password: form.confirm_password,
+        ...captcha,
       })
-      ElMessage.success('注册成功，正在自动登录...')
-      await authStore.login({
-        username: form.username,
-        password: form.password,
-      })
-      router.push('/history')
-    } catch {
-      // Error handled by Axios interceptor
+      ElMessage.success('注册成功，请登录')
+      router.push('/login')
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.detail || '注册失败，请稍后重试')
     } finally {
+      await captchaRef.value?.refresh()
       loading.value = false
     }
   })

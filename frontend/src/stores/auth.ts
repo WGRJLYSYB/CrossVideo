@@ -9,7 +9,14 @@ See LICENSE file in repository root for full license text.
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { loginApi, registerApi, getProfileApi, type LoginParams, type RegisterParams } from '@/api/auth'
+import {
+  completeTwoFactorLoginApi,
+  loginApi,
+  registerApi,
+  getProfileApi,
+  type LoginParams,
+  type RegisterParams,
+} from '@/api/auth'
 import type { UserInfo } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -24,6 +31,22 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const res = await loginApi(params)
+      if (!res.access_token) return res
+      token.value = res.access_token
+      username.value = res.username
+      localStorage.setItem('crossvideo_token', res.access_token)
+      localStorage.setItem('crossvideo_username', res.username)
+      await fetchProfile()
+      return res
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function completeTwoFactorLogin(challengeToken: string, code: string) {
+    loading.value = true
+    try {
+      const res = await completeTwoFactorLoginApi(challengeToken, code)
       token.value = res.access_token
       username.value = res.username
       localStorage.setItem('crossvideo_token', res.access_token)
@@ -70,6 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     isAuthenticated,
     login,
+    completeTwoFactorLogin,
     register,
     fetchProfile,
     logout,

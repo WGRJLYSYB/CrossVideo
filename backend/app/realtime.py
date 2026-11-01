@@ -124,7 +124,7 @@ def authenticate_token(token: str) -> User | None:
         return db.scalar(select(User).where(User.id == user_id))
 
 
-@router.websocket("/api/v1/ws/playback")
+@router.websocket("/ws/playback")
 async def playback_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
     connection: PlaybackConnection | None = None

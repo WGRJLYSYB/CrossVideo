@@ -22,7 +22,10 @@ os.environ["CROSSVIDEO_SECRET_KEY"] = "test-secret-key"
 
 from fastapi.testclient import TestClient
 
-from app.db import Base, engine
+import pytest
+
+from app.db import Base, SessionLocal, engine
+from app.models import CaptchaChallenge
 from app.main import app
 
 client = TestClient(app)
@@ -33,12 +36,36 @@ def setup_function():
     Base.metadata.create_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def avoid_external_title_requests(monkeypatch):
+    from app.routers import progress
+
+    monkeypatch.setattr(progress, "fetch_and_save_site_title", lambda _site_id: None)
+
+
+def captcha_fields(prefix: str = "/api/v1/admin") -> dict:
+    challenge = client.get(f"{prefix}/auth/captcha").json()
+    with SessionLocal() as db:
+        stored = db.get(CaptchaChallenge, challenge["challenge_id"])
+        clicks = stored.target_points
+    return {"captcha_id": challenge["challenge_id"], "captcha_clicks": clicks}
+
+
 def admin_auth_headers(username: str = "admin_user") -> dict[str, str]:
     client.post(
         "/api/v1/admin/auth/register",
-        json={"username": username, "password": "Password123", "confirm_password": "Password123"},
+        json={
+            "username": username,
+            "password": "Password123",
+            "confirm_password": "Password123",
+            **captcha_fields(),
+        },
     )
-    res = client.post("/api/v1/admin/auth/login", json={"username": username, "password": "Password123"})
+    res = client.post("/api/v1/admin/auth/login", json={
+        "username": username,
+        "password": "Password123",
+        **captcha_fields(),
+    })
     assert res.status_code == 200
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -47,21 +74,35 @@ def admin_auth_headers(username: str = "admin_user") -> dict[str, str]:
 def test_admin_auth_register_and_login():
     reg = client.post(
         "/api/v1/admin/auth/register",
-        json={"username": "superadmin", "password": "Password123", "confirm_password": "Password123"},
+        json={
+            "username": "superadmin",
+            "password": "Password123",
+            "confirm_password": "Password123",
+            **captcha_fields(),
+        },
     )
-    assert reg.status_code == 201
+    assert reg.status_code == 200
 
     # Duplicate registration should return 409
     dup = client.post(
         "/api/v1/admin/auth/register",
-        json={"username": "superadmin", "password": "Password123", "confirm_password": "Password123"},
+        json={
+            "username": "superadmin",
+            "password": "Password123",
+            "confirm_password": "Password123",
+            **captcha_fields(),
+        },
     )
     assert dup.status_code == 409
 
     # Successful login
     login_res = client.post(
         "/api/v1/admin/auth/login",
-        json={"username": "superadmin", "password": "Password123"},
+        json={
+            "username": "superadmin",
+            "password": "Password123",
+            **captcha_fields(),
+        },
     )
     assert login_res.status_code == 200
     data = login_res.json()

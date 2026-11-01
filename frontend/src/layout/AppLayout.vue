@@ -126,6 +126,19 @@ See LICENSE file in repository root for full license text.
             <span>黑名单管理</span>
           </div>
         </router-link>
+
+        <router-link
+          to="/settings"
+          class="flex items-center px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group"
+          :class="isActive('/settings')
+            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+            : isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'"
+        >
+          <div class="flex items-center gap-3">
+            <el-icon :size="17"><Setting /></el-icon>
+            <span>设置</span>
+          </div>
+        </router-link>
       </nav>
 
       <!-- User Profile at bottom -->
@@ -172,6 +185,19 @@ See LICENSE file in repository root for full license text.
 
         <div class="flex items-center gap-3">
           <!-- Theme Toggle Button -->
+          <el-tooltip content="影视 AI 助手" placement="bottom">
+            <button
+              class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
+              :class="isDark
+                ? 'text-indigo-300 hover:text-indigo-200 hover:bg-indigo-400/10'
+                : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'"
+              aria-label="打开影视 AI 助手"
+              @click="aiVisible = true"
+            >
+              <el-icon :size="18"><ChatDotRound /></el-icon>
+            </button>
+          </el-tooltip>
+
           <el-tooltip :content="isDark ? '切换亮色主题' : '切换暗色主题'" placement="bottom">
             <button
               class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
@@ -223,6 +249,7 @@ See LICENSE file in repository root for full license text.
         </router-view>
       </main>
     </div>
+    <AIChatDialog v-model="aiVisible" />
   </div>
 </template>
 
@@ -231,11 +258,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { Clock, Star, VideoCamera, SwitchButton, Sunny, Moon, ArrowDown, Refresh, VideoPlay, DataAnalysis, Lock } from '@element-plus/icons-vue'
+import { Clock, Star, VideoCamera, SwitchButton, Sunny, Moon, ArrowDown, Refresh, VideoPlay, DataAnalysis, Lock, Setting, ChatDotRound } from '@element-plus/icons-vue'
+import AIChatDialog from '@/components/AIChatDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const aiVisible = ref(false)
 
 const profile = computed(() => authStore.userProfile)
 const currentTitle = computed(() => (route.meta.title as string) || '控制台')

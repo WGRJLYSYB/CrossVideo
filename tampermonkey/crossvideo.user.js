@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.13
+// @version      0.1.14
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -60,6 +60,9 @@ See LICENSE file in repository root for full license text.
         .cv-field { display: grid; gap: 6px; margin: 12px 0; }
         .cv-field input, .cv-search { width: 100%; padding: 10px 11px; border: 1px solid #bdb6a8; border-radius: 7px; background: #fffdf8; color: #18212b; outline: none; transition: border-color .15s, box-shadow .15s; }
         .cv-field input:focus, .cv-search:focus { border-color: #b34a2b; box-shadow: 0 0 0 3px rgba(179, 74, 43, .14); }
+        .cv-captcha-image { position: relative; width: min(360px, 100%); cursor: crosshair; }
+        .cv-captcha-image img { display: block; width: 100%; border: 1px solid #bdb6a8; border-radius: 7px; }
+        .cv-captcha-mark { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; transform: translate(-50%, -50%); border: 2px solid white; border-radius: 50%; background: #b34a2b; color: white; font-size: 12px; font-weight: 700; }
         .cv-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
         .cv-button { border: 0; border-radius: 6px; padding: 10px 14px; cursor: pointer; background: #b34a2b; color: white; font-weight: 600; }
         .cv-button.secondary { background: #ddd7ca; color: #18212b; }
@@ -533,12 +536,55 @@ See LICENSE file in repository root for full license text.
     };
 
     const showAuth = (mode = 'login') => {
-        showModal(`<h2>CrossVideo</h2><div class="cv-tabs"><button data-mode="login">登录</button><button data-mode="register">注册</button></div><form><label class="cv-field">用户名<input name="username" required autocomplete="username"></label><label class="cv-field">密码<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="cv-field confirm-field">确认密码<input name="confirm_password" type="password" minlength="8" autocomplete="new-password"></label><label class="cv-field">接口地址<input name="api_base" value="${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE)}" placeholder="http://127.0.0.1:8000" required></label><div class="cv-error"></div><div class="cv-actions"><button class="cv-button" type="submit">继续</button></div></form>`);
+        showModal(`<h2>CrossVideo</h2><div class="cv-tabs"><button data-mode="login">登录</button><button data-mode="register">注册</button></div><form><label class="cv-field">用户名<input name="username" required autocomplete="username"></label><label class="cv-field">密码<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="cv-field confirm-field">确认密码<input name="confirm_password" type="password" minlength="8" autocomplete="new-password"></label><label class="cv-field">图形验证 <span class="cv-captcha-prompt">请先填写接口地址</span><div class="cv-captcha-image"><img class="cv-captcha-img" alt="点选验证码"><div class="cv-captcha-markers"></div></div><button class="cv-button secondary cv-captcha-refresh" type="button">换一张</button><small class="cv-captcha-count">0/2</small></label><label class="cv-field">接口地址<input name="api_base" value="${GM_getValue(API_BASE_KEY, DEFAULT_API_BASE)}" placeholder="http://127.0.0.1:8000" required></label><div class="cv-error"></div><div class="cv-actions"><button class="cv-button" type="submit">继续</button></div></form>`);
         const tabs = root.querySelectorAll('[data-mode]');
         const form = root.querySelector('form');
         const confirm = root.querySelector('.confirm-field');
         const error = root.querySelector('.cv-error');
-        const setMode = (next) => { mode = next; tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.mode === mode)); confirm.style.display = mode === 'register' ? 'grid' : 'none'; };
+        const image = root.querySelector('.cv-captcha-img');
+        const prompt = root.querySelector('.cv-captcha-prompt');
+        const markers = root.querySelector('.cv-captcha-markers');
+        const count = root.querySelector('.cv-captcha-count');
+        let challenge = null;
+        let clicks = [];
+        const refreshCaptcha = async () => {
+            challenge = null;
+            clicks = [];
+            markers.replaceChildren();
+            count.textContent = '0/2';
+            image.removeAttribute('src');
+            try {
+                const api = new URL(form.api_base.value.trim());
+                if (!['http:', 'https:'].includes(api.protocol)) throw new Error('接口地址必须使用 http 或 https');
+                GM_setValue(API_BASE_KEY, form.api_base.value.trim().replace(/\/+$/, ''));
+                prompt.textContent = '正在加载验证码…';
+                challenge = await request('GET', '/auth/captcha');
+                image.src = challenge.image;
+                prompt.textContent = `按顺序点击：${challenge.sequence.join(' → ')}`;
+            } catch (captchaError) {
+                prompt.textContent = captchaError.message || '验证码加载失败';
+            }
+        };
+        image.onclick = (event) => {
+            event.preventDefault();
+            if (!challenge || clicks.length >= 2) return;
+            const rect = image.getBoundingClientRect();
+            const point = {
+                x: Math.round(((event.clientX - rect.left) / rect.width) * challenge.width),
+                y: Math.round(((event.clientY - rect.top) / rect.height) * challenge.height),
+            };
+            clicks.push(point);
+            const marker = document.createElement('span');
+            marker.className = 'cv-captcha-mark';
+            marker.textContent = String(clicks.length);
+            marker.style.left = `${(point.x / challenge.width) * 100}%`;
+            marker.style.top = `${(point.y / challenge.height) * 100}%`;
+            markers.append(marker);
+            count.textContent = `${clicks.length}/2`;
+        };
+        root.querySelector('.cv-captcha-refresh').onclick = refreshCaptcha;
+        form.api_base.onchange = refreshCaptcha;
+        const setMode = (next) => { mode = next; tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.mode === mode)); confirm.style.display = mode === 'register' ? 'grid' : 'none'; refreshCaptcha(); };
         tabs.forEach((tab) => { tab.onclick = () => setMode(tab.dataset.mode); });
         setMode(mode);
         form.onsubmit = async (event) => {
@@ -549,15 +595,27 @@ See LICENSE file in repository root for full license text.
                 const parsedApiBase = new URL(data.api_base);
                 if (!['http:', 'https:'].includes(parsedApiBase.protocol)) throw new Error('接口地址必须使用 http 或 https');
                 GM_setValue(API_BASE_KEY, data.api_base.replace(/\/+$/, ''));
+                if (!challenge || clicks.length !== 2) throw new Error('请按提示完成图形验证');
+                const captcha = { captcha_id: challenge.challenge_id, captcha_clicks: clicks };
                 if (mode === 'register') {
-                    await request('POST', '/auth/register', data);
+                    await request('POST', '/auth/register', {
+                        username: data.username,
+                        password: data.password,
+                        confirm_password: data.confirm_password,
+                        ...captcha,
+                    });
                     error.textContent = '注册成功，请使用刚才的账号登录';
                     form.password.value = '';
                     form.confirm_password.value = '';
                     setMode('login');
                     return;
                 }
-                const result = await request('POST', '/auth/login', { username: data.username, password: data.password });
+                let result = await request('POST', '/auth/login', { username: data.username, password: data.password, ...captcha });
+                if (result.requires_2fa) {
+                    const code = window.prompt('请输入身份验证器中的验证码');
+                    if (!code) throw new Error('双因子验证已取消');
+                    result = await request('POST', '/auth/login/2fa', { challenge_token: result.challenge_token, code });
+                }
                 GM_setValue(TOKEN_KEY, result.access_token);
                 GM_setValue(USERNAME_KEY, result.username || data.username);
                 state.realtimeStopped = false;
@@ -567,7 +625,10 @@ See LICENSE file in repository root for full license text.
                 registerMenus();
                 showNotice('登录成功');
                 scan();
-            } catch (requestError) { error.textContent = requestError.message; }
+            } catch (requestError) {
+                error.textContent = requestError.message;
+                await refreshCaptcha();
+            }
         };
     };
 

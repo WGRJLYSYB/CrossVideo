@@ -16,7 +16,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -26,6 +26,7 @@ from ..auth import get_current_user
 from ..db import get_db
 from ..models import BlockedSite, PlaybackProgress, User, UserSite
 from ..schemas import ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
+from ..site_tasks import fetch_and_save_site_title
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -50,7 +51,7 @@ def as_utc(value: datetime | None) -> datetime | None:
 
 
 @router.post("/sync")
-def sync_progress(payload: ProgressSyncRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
+def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
     if db.scalar(select(BlockedSite).where(BlockedSite.user_id == user.id, BlockedSite.site_host == payload.site_host.lower())) is not None:
         return {"status": "ignored", "message": "site is blocked"}
     progress_seconds = min(payload.progress_seconds, payload.duration)
@@ -91,7 +92,6 @@ def sync_progress(payload: ProgressSyncRequest, user: User = Depends(get_current
     db.execute(site_insert.on_conflict_do_update(
         index_elements=[UserSite.user_id, UserSite.site_host],
         set_={
-            "site_name": site_insert.excluded.site_name,
             "last_watched_at": case(
                 (UserSite.last_watched_at < observed_at, observed_at),
                 else_=UserSite.last_watched_at,
@@ -101,6 +101,9 @@ def sync_progress(payload: ProgressSyncRequest, user: User = Depends(get_current
     ))
 
     db.commit()
+    site = db.scalar(select(UserSite).where(UserSite.user_id == user.id, UserSite.site_host == host))
+    if site is not None and not site.title_fetch_attempted:
+        background_tasks.add_task(fetch_and_save_site_title, site.id)
     return {"status": "success", "message": "Progress updated"}
 
 

@@ -16,7 +16,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -32,6 +32,10 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp())
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    totp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
     progress: Mapped[list["PlaybackProgress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     blocked_sites: Mapped[list["BlockedSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     site_visits: Mapped[list["UserSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -79,7 +83,49 @@ class UserSite(Base):
     site_name: Mapped[str] = mapped_column(String(255))
     last_watched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     watched_seconds: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    title_fetch_attempted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     user: Mapped[User] = relationship(back_populates="site_visits")
+
+
+class CaptchaChallenge(Base):
+    __tablename__ = "captcha_challenges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    target_points: Mapped[list[dict[str, float]]] = mapped_column(JSON)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class EmailActionToken(Base):
+    __tablename__ = "email_action_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    purpose: Mapped[str] = mapped_column(String(32))
+    target_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AIConversation(Base):
+    __tablename__ = "ai_conversations"
+    __table_args__ = (Index("idx_ai_conversation_user", "user_id", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    messages: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class AIMonthlyUsage(Base):
+    __tablename__ = "ai_monthly_usage"
+    __table_args__ = (Index("idx_ai_usage_user_month", "user_id", "month", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    month: Mapped[str] = mapped_column(String(7))
+    used_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reserved_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class Favorite(Base):

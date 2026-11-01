@@ -12,6 +12,7 @@ CrossVideo Userscript 用于识别网页中的主要 HTML5 视频播放器，并
 - Sync HTML5 video progress across devices and supported websites
 - Resume prompt for previously watched videos
 - Login and registration from the Tampermonkey menu
+- Server-verified click-order CAPTCHA on login and registration, plus authenticator-code login when 2FA is enabled
 - Searchable, paginated playback history
 - Delete individual history records
 - Filter history to the current website
@@ -38,6 +39,8 @@ https://your-domain.example
 
 The script appends `/api/v1` automatically. Do not include `/api/v1` in the address field.
 
+Complete the on-screen click-order challenge before submitting login or registration. If two-factor authentication is enabled for the account, the script requests an authenticator code after the password is accepted.
+
 ## Mobile Version
 
 On mobile browsers, install `crossvideo-mobile.user.js` instead. It keeps the same account, API, progress sync, resume prompt, history search, pagination, deletion, and current-site filtering behavior, but replaces the desktop userscript menu with a floating play button in the top-right corner.
@@ -58,6 +61,8 @@ The published script declares `@connect *` because each user configures their ow
 ## Backend
 
 The backend must provide the CrossVideo FastAPI service. Start it from the repository's `backend` directory, then enter its public base address in the userscript login window.
+
+The CAPTCHA challenge is shared with the web admin. The self-hosted image challenge is a basic deterrent and should not be treated as strong protection against automated vision models.
 
 The script expects the API routes under:
 
