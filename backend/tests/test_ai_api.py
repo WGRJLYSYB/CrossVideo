@@ -1,4 +1,5 @@
 import os
+import json
 
 os.environ["CROSSVIDEO_DATABASE_URL"] = "sqlite:///./data/test-crossvideo.db"
 os.environ["CROSSVIDEO_SECRET_KEY"] = "test-secret-key"
@@ -64,15 +65,23 @@ def test_ai_chat_persists_history_and_uses_provider_token_counts(monkeypatch):
         calls.append((messages, max_tokens))
         if messages[0]["content"] == ai.CLASSIFIER_SYSTEM_PROMPT:
             return '{"allowed": true}', 5
-        return "可以从人物弧光来理解这段剧情。", 17
 
     monkeypatch.setattr(ai, "_deepseek_chat", fake_chat)
+    monkeypatch.setattr(ai, "_deepseek_chat_stream", lambda _messages, _max_tokens: iter([
+        ("可以从人物弧光来理解这段剧情。", None),
+        ("", 17),
+    ]))
     headers = auth_headers()
     response = client.post("/api/v1/ai/chat", headers=headers, json={"message": "分析一下电影里的角色成长"})
     assert response.status_code == 200
-    assert response.json()["tokens_used"] == 22
-    assert response.json()["used_tokens"] == 22
-    assert len(calls) == 2
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers.get("x-access-token")
+    events = [json.loads(line.removeprefix("data: ")) for line in response.text.splitlines() if line.startswith("data: ")]
+    assert events[0] == {"type": "delta", "content": "可以从人物弧光来理解这段剧情。"}
+    assert events[-1]["type"] == "done"
+    assert events[-1]["tokens_used"] == 22
+    assert events[-1]["used_tokens"] == 22
+    assert len(calls) == 1
 
     history = client.get("/api/v1/ai/chat/history", headers=headers)
     assert history.status_code == 200
@@ -105,8 +114,9 @@ def test_ai_refuses_non_film_topics_without_generating_an_answer(monkeypatch):
     monkeypatch.setattr(ai, "_deepseek_chat", fake_chat)
     response = client.post("/api/v1/ai/chat", headers=auth_headers(), json={"message": "帮我写一个 Python 程序"})
     assert response.status_code == 200
-    assert "只回答电影" in response.json()["answer"]
-    assert response.json()["tokens_used"] == 4
+    events = [json.loads(line.removeprefix("data: ")) for line in response.text.splitlines() if line.startswith("data: ")]
+    assert "只回答电影" in events[-1]["answer"]
+    assert events[-1]["tokens_used"] == 4
     assert len(calls) == 1
 
 

@@ -84,6 +84,12 @@ const router = createRouter({
           component: () => import('@/views/SettingsView.vue'),
           meta: { requiresAuth: true, title: '设置' },
         },
+        {
+          path: 'users',
+          name: 'users',
+          component: () => import('@/views/admin/UsersView.vue'),
+          meta: { requiresAuth: true, requiresSuperuser: true, title: '用户管理' },
+        },
       ],
     },
     {
@@ -93,17 +99,19 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
   document.title = to.meta.title ? `${to.meta.title} - CrossVideo` : 'CrossVideo 后台管理'
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
-    next({ name: 'dashboard' })
-  } else {
-    next()
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
+  if (to.meta.requiresSuperuser && authStore.isAuthenticated) {
+    if (!authStore.userProfile) await authStore.fetchProfile()
+    if (!authStore.userProfile?.is_superuser) return { name: 'dashboard' }
+  }
+  if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) return { name: 'dashboard' }
+  return true
 })
 
 export default router

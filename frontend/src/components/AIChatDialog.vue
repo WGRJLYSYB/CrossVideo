@@ -30,7 +30,10 @@
           <div
             class="max-w-[88%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-6"
             :class="message.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'"
-          >{{ message.content }}</div>
+          >
+            <div v-if="message.role === 'assistant'" class="markdown-content" v-html="renderMarkdown(message.content)" />
+            <template v-else>{{ message.content }}</template>
+          </div>
         </div>
         <div v-if="busy" class="text-sm text-slate-500">正在思考影视相关内容…</div>
       </div>
@@ -62,6 +65,8 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import DOMPurify from 'dompurify'
+import MarkdownIt from 'markdown-it'
 import {
   clearAIChatHistoryApi,
   getAIChatHistoryApi,
@@ -78,6 +83,7 @@ const visible = computed({
 })
 
 const messages = ref<AIMessage[]>([])
+const markdown = new MarkdownIt({ html: false, breaks: true, linkify: true })
 const draft = ref('')
 const busy = ref(false)
 const messageList = ref<HTMLElement>()
@@ -110,20 +116,29 @@ async function scrollToBottom() {
   if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
 }
 
+function renderMarkdown(content: string): string {
+  return DOMPurify.sanitize(markdown.render(content))
+}
+
 async function send() {
   const content = draft.value.trim()
   if (!content || busy.value || !state.ai_available || state.remaining_tokens <= 0) return
   messages.value.push({ role: 'user', content })
+  messages.value.push({ role: 'assistant', content: '' })
   draft.value = ''
   busy.value = true
   await scrollToBottom()
   try {
-    const result = await sendAIChatMessageApi(content)
-    messages.value.push({ role: 'assistant', content: result.answer })
+    const result = await sendAIChatMessageApi(content, (chunk) => {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage?.role === 'assistant') lastMessage.content += chunk
+      void scrollToBottom()
+    })
     Object.assign(state, result)
-  } catch {
+  } catch (error) {
     draft.value = content
-    messages.value.pop()
+    messages.value.splice(-2, 2)
+    ElMessage.error(error instanceof Error ? error.message : 'AI 回复失败')
   } finally {
     busy.value = false
     await scrollToBottom()
@@ -149,3 +164,49 @@ watch(() => props.modelValue, (opened) => {
   if (opened) loadHistory().catch(() => ElMessage.error('无法恢复 AI 对话记录'))
 })
 </script>
+
+<style scoped>
+.markdown-content :deep(p) {
+  margin: 0.35rem 0;
+}
+
+.markdown-content :deep(h1),
+.markdown-content :deep(h2),
+.markdown-content :deep(h3) {
+  margin: 0.6rem 0 0.35rem;
+  font-weight: 700;
+}
+
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 0.35rem 0;
+  padding-left: 1.4rem;
+}
+
+.markdown-content :deep(ul) {
+  list-style: disc;
+}
+
+.markdown-content :deep(ol) {
+  list-style: decimal;
+}
+
+.markdown-content :deep(code) {
+  border-radius: 0.25rem;
+  background: rgb(15 23 42 / 70%);
+  padding: 0.1rem 0.25rem;
+}
+
+.markdown-content :deep(pre) {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: rgb(15 23 42 / 70%);
+  padding: 0.75rem;
+}
+
+.markdown-content :deep(blockquote) {
+  border-left: 2px solid rgb(129 140 248);
+  padding-left: 0.75rem;
+  color: rgb(148 163 184);
+}
+</style>

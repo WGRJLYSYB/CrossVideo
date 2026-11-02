@@ -120,6 +120,85 @@ def test_admin_auth_register_and_login():
     assert me_data["watch_later_count"] == 0
 
 
+def test_superuser_can_list_accounts_and_disable_regular_users():
+    from app.auth import create_access_token, hash_password
+    from app.db import SessionLocal
+    from app.models import User
+    from app.realtime import authenticate_token
+
+    superuser_headers = admin_auth_headers("root-admin")
+    with SessionLocal() as db:
+        superuser = db.query(User).filter_by(username="root-admin").one()
+        superuser.is_superuser = True
+        regular_user = User(username="managed-user", hashed_password=hash_password("Password123"))
+        db.add(regular_user)
+        db.commit()
+        regular_user_id = regular_user.id
+        regular_user_token = create_access_token(regular_user.id)
+
+    regular_list = client.get("/api/v1/admin/users?role=regular", headers=superuser_headers)
+    assert regular_list.status_code == 200
+    assert [item["username"] for item in regular_list.json()["items"]] == ["managed-user"]
+    superuser_list = client.get("/api/v1/admin/users?role=superadmin", headers=superuser_headers)
+    assert superuser_list.status_code == 200
+    assert [item["username"] for item in superuser_list.json()["items"]] == ["root-admin"]
+
+    disabled = client.patch(
+        f"/api/v1/admin/users/{regular_user_id}/status",
+        headers=superuser_headers,
+        json={"is_active": False},
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["is_active"] is False
+    regular_authorization = {"Authorization": f"Bearer {regular_user_token}"}
+    assert client.get("/api/v1/admin/dashboard", headers=regular_authorization).status_code == 401
+    assert authenticate_token(regular_user_token) is None
+
+    login = client.post("/api/v1/auth/login", json={
+        "username": "managed-user",
+        "password": "Password123",
+        **captcha_fields("/api/v1"),
+    })
+    assert login.status_code == 403
+
+    regular_headers = admin_auth_headers("ordinary-user")
+    forbidden = client.get("/api/v1/admin/users", headers=regular_headers)
+    assert forbidden.status_code == 403
+    cannot_disable_admin = client.patch(
+        f"/api/v1/admin/users/{superuser_list.json()['items'][0]['id']}/status",
+        headers=superuser_headers,
+        json={"is_active": False},
+    )
+    assert cannot_disable_admin.status_code == 409
+
+
+def test_cli_account_commands_create_reset_and_list_superusers(monkeypatch, capsys):
+    from app import commands
+    from app.auth import verify_password
+    from app.db import SessionLocal
+    from app.models import User
+
+    passwords = iter(("Password123!", "Password123!"))
+    monkeypatch.setattr(commands.getpass, "getpass", lambda _prompt: next(passwords))
+    commands.create_superuser("cli-admin")
+    assert "Password123!" not in capsys.readouterr().out
+
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(username="cli-admin").one()
+        assert user.is_superuser
+        assert verify_password("Password123!", user.hashed_password)
+
+    passwords = iter(("NewPassword123!", "NewPassword123!"))
+    monkeypatch.setattr(commands.getpass, "getpass", lambda _prompt: next(passwords))
+    commands.set_password("cli-admin")
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(username="cli-admin").one()
+        assert verify_password("NewPassword123!", user.hashed_password)
+
+    commands.list_superusers()
+    assert "cli-admin" in capsys.readouterr().out
+
+
 def test_admin_history_pagination_search_and_delete():
     headers = admin_auth_headers("history_user")
 

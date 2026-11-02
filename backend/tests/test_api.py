@@ -241,13 +241,26 @@ def test_totp_setup_requires_code_and_login_requires_second_factor():
 def test_email_activation_and_password_reset(monkeypatch):
     from app.models import EmailActionToken, User
     from app.routers import auth as auth_router
+    from app.verification import record_email_send_attempt
 
     sent = []
-    monkeypatch.setattr(auth_router, "send_action_email", lambda email, subject, path, token: sent.append((email, subject, path, token)))
+
+    def fake_send(db, user_id, purpose, email, subject, path, token, _template):
+        record_email_send_attempt(db, user_id, purpose)
+        sent.append((email, subject, path, token))
+
+    monkeypatch.setattr(
+        auth_router,
+        "send_action_email",
+        fake_send,
+    )
     headers = auth_headers()
     request = client.post("/api/v1/auth/email", headers=headers, json={"email": "tester@example.com"})
     assert request.status_code == 200
     assert sent[-1][2] == "verify-email"
+    limited = client.post("/api/v1/auth/email", headers=headers, json={"email": "tester@example.com"})
+    assert limited.status_code == 429
+    assert len(sent) == 1
     settings = client.get("/api/v1/auth/settings", headers=headers)
     assert settings.status_code == 200
     assert settings.json()["pending_email"] == "tester@example.com"
@@ -280,6 +293,9 @@ def test_email_activation_and_password_reset(monkeypatch):
     reset_requested = client.post("/api/v1/auth/password-reset/request", json={"email": "tester@example.com"})
     assert reset_requested.status_code == 200
     assert sent[-1][2] == "reset-password"
+    repeated_reset = client.post("/api/v1/auth/password-reset/request", json={"email": "tester@example.com"})
+    assert repeated_reset.status_code == 200
+    assert len(sent) == 2
     reset = client.post("/api/v1/auth/password-reset/confirm", json={
         "token": sent[-1][3],
         "new_password": "NewPassword123",

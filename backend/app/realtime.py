@@ -116,12 +116,15 @@ playback_manager = PlaybackManager()
 def authenticate_token(token: str) -> User | None:
     try:
         payload = jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
+        if payload.get("purpose", "access") != "access":
+            return None
         user_id = int(payload.get("sub", ""))
     except (JWTError, TypeError, ValueError):
         return None
 
     with SessionLocal() as db:
-        return db.scalar(select(User).where(User.id == user_id))
+        user = db.scalar(select(User).where(User.id == user_id))
+        return user if user is not None and user.is_active else None
 
 
 @router.websocket("/ws/playback")

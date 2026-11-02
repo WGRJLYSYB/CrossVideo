@@ -11,6 +11,8 @@ export interface UserInfo {
   id: number
   username: string
   created_at: string | null
+  is_superuser: boolean
+  is_active: boolean
   history_count: number
   favorites_count: number
   watch_later_count: number

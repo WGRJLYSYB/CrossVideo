@@ -215,9 +215,30 @@ class AdminUserInfoResponse(BaseModel):
     id: int
     username: str
     created_at: datetime | None = None
+    is_superuser: bool = False
+    is_active: bool = True
     history_count: int = 0
     favorites_count: int = 0
     watch_later_count: int = 0
+
+
+class ManagedUserInfo(BaseModel):
+    id: int
+    username: str
+    created_at: datetime | None = None
+    is_superuser: bool
+    is_active: bool
+
+
+class ManagedUserListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[ManagedUserInfo]
+
+
+class UserStatusUpdateRequest(BaseModel):
+    is_active: bool
 
 
 class AdminHistoryItem(BaseModel):

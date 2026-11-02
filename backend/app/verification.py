@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import CaptchaChallenge
+from .models import CaptchaChallenge, EmailSendAttempt, User
 from .schemas import CaptchaClick
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,7 +124,55 @@ def render_email_template(template_name: str, link: str) -> str:
     return templates.get_template(template_name).render(link=link)
 
 
-def send_action_email(recipient: str, subject: str, action_path: str, token: str, template_name: str) -> None:
+def record_email_send_attempt(db: Session, user_id: int, purpose: str) -> None:
+    now = datetime.now(UTC)
+    window_start = now - timedelta(hours=1)
+    db.scalar(select(User.id).where(User.id == user_id).with_for_update())
+    db.query(EmailSendAttempt).filter(
+        EmailSendAttempt.user_id == user_id,
+        EmailSendAttempt.purpose == purpose,
+        EmailSendAttempt.sent_at < window_start,
+    ).delete(synchronize_session=False)
+    attempts = db.scalars(
+        select(EmailSendAttempt)
+        .where(
+            EmailSendAttempt.user_id == user_id,
+            EmailSendAttempt.purpose == purpose,
+            EmailSendAttempt.sent_at >= window_start,
+        )
+        .order_by(EmailSendAttempt.sent_at)
+        .with_for_update()
+    ).all()
+    if attempts:
+        last_sent = utc_datetime(attempts[-1].sent_at)
+        retry_after = int((last_sent + timedelta(seconds=60) - now).total_seconds()) + 1
+        if retry_after > 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="email was sent recently; try again later",
+                headers={"Retry-After": str(retry_after)},
+            )
+    if len(attempts) >= 5:
+        retry_after = int((utc_datetime(attempts[0].sent_at) + timedelta(hours=1) - now).total_seconds()) + 1
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="email send limit reached; try again later",
+            headers={"Retry-After": str(max(1, retry_after))},
+        )
+    db.add(EmailSendAttempt(user_id=user_id, purpose=purpose, sent_at=now))
+    db.commit()
+
+
+def send_action_email(
+    db: Session,
+    user_id: int,
+    purpose: str,
+    recipient: str,
+    subject: str,
+    action_path: str,
+    token: str,
+    template_name: str,
+) -> None:
     settings = get_settings()
     if not settings.smtp_host or not settings.smtp_from_email:
         raise HTTPException(
@@ -132,6 +180,7 @@ def send_action_email(recipient: str, subject: str, action_path: str, token: str
             detail="email delivery is not configured",
         )
 
+    record_email_send_attempt(db, user_id, purpose)
     link = f"{settings.frontend_base_url.rstrip('/')}/{action_path}?token={token}"
     html_body = render_email_template(template_name, link)
 

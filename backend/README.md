@@ -47,7 +47,22 @@ Access tokens are valid for 30 days by default and are renewed on each authentic
 
 Account security adds a server-verified click-order CAPTCHA to login and registration, TOTP two-factor authentication, email verification, and password reset. Configure `CROSSVIDEO_SMTP_HOST`, `CROSSVIDEO_SMTP_PORT`, `CROSSVIDEO_SMTP_USERNAME`, `CROSSVIDEO_SMTP_PASSWORD`, `CROSSVIDEO_SMTP_FROM_EMAIL`, and `CROSSVIDEO_SMTP_STARTTLS` to enable email delivery. Set `CROSSVIDEO_FRONTEND_BASE_URL` to the public frontend base ending in `/admin`, so verification links return to the correct app. The self-hosted CAPTCHA is a basic bot deterrent, not a robust replacement for a commercial risk-based CAPTCHA.
 
-The film/TV discussion assistant uses the DeepSeek chat-completions API. Configure `CROSSVIDEO_DEEPSEEK_API_KEY`, and optionally `CROSSVIDEO_DEEPSEEK_BASE_URL` and `CROSSVIDEO_DEEPSEEK_MODEL`. `CROSSVIDEO_MONTHLY_AI_TOKEN_QUOTA` defaults to 1,000 tokens per account per UTC calendar month. The service uses provider-reported token counts, reserves quota while requests are in flight, persists a single conversation per user, and runs an additional topic-classification request before generating a response.
+Email verification and password-reset sends are limited to one message per account and purpose every 60 seconds, with a maximum of five per hour.
+
+## Superuser administration
+
+Run these commands from `backend/` after configuring the database and applying migrations. Password input and confirmation are hidden:
+
+```bash
+uv run alembic upgrade head
+uv run python -m app.commands create-superuser admin
+uv run python -m app.commands set-password admin
+uv run python -m app.commands list-superusers
+```
+
+The commands use Python's built-in `argparse` and `getpass`, so no extra CLI framework is required. `create-superuser` creates an account directly, without public registration or CAPTCHA. Superusers see the **用户管理** page, where they can view regular users and superusers separately and disable or re-enable regular accounts. These privileges are checked by the API as well as the frontend. A disabled account cannot sign in or use authenticated HTTP or WebSocket endpoints.
+
+The film/TV discussion assistant uses the DeepSeek chat-completions API. Configure `CROSSVIDEO_DEEPSEEK_API_KEY`, and optionally `CROSSVIDEO_DEEPSEEK_BASE_URL` and `CROSSVIDEO_DEEPSEEK_MODEL`. `CROSSVIDEO_MONTHLY_AI_TOKEN_QUOTA` defaults to 1,000 tokens per account per UTC calendar month. The service streams assistant text as server-sent events, renders sanitized Markdown in the browser, reserves quota while requests are in flight, persists a single conversation per user, and runs an additional topic-classification request before generating a response. The streaming browser request sends the access token in the `Authorization` header.
 
 ## Docker
 

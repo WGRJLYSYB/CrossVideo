@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.16
+// @version      0.1.17
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -51,7 +51,8 @@ See LICENSE file in repository root for full license text.
         .cv-mobile-fab { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 48px; height: 48px; border: 0; border-radius: 50%; background: #FDF6E3; color: #fff; box-shadow: 0 5px 18px rgba(0,0,0,.28); font-size: 22px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
         .cv-mobile-fab:active { transform: scale(.94); }
         .cv-mobile-overlay { position: fixed; inset: 0; display: grid; align-items: start; justify-items: center; padding: max(76px, calc(env(safe-area-inset-top) + 64px)) 12px 20px; background: rgba(12,18,24,.62); pointer-events: auto; overflow-y: auto; }
-        .cv-mobile-card { width: min(460px, 100%); max-height: 82vh; overflow: hidden; padding: 20px; background: #f6f4ed; border: 1px solid #d8d2c4; border-radius: 13px; box-shadow: 0 18px 55px rgba(0,0,0,.32); }
+        .cv-mobile-card { width: min(460px, 100%); max-height: 82vh; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 20px; background: #f6f4ed; border: 1px solid #d8d2c4; border-radius: 13px; box-shadow: 0 18px 55px rgba(0,0,0,.32); }
+        .cv-mobile-card::-webkit-scrollbar { display: none; }
         .cv-mobile-card h2 { margin: 0 0 16px; font: 700 23px/1.1 Georgia, serif; }
         .cv-mobile-close { float: right; border: 0; background: transparent; color: #61706d; font-size: 26px; line-height: 1; padding: 0 4px; }
         .cv-mobile-tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid #d8d2c4; }

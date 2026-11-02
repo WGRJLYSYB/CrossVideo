@@ -8,15 +8,17 @@
 
 import json
 import logging
+from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import create_access_token, get_current_user
 from ..config import get_settings
 from ..db import get_db
 from ..models import AIConversation, AIMonthlyUsage, User
@@ -151,6 +153,72 @@ def _deepseek_chat(messages: list[dict[str, str]], max_tokens: int) -> tuple[str
     return content, total_tokens
 
 
+def _deepseek_chat_stream(messages: list[dict[str, str]], max_tokens: int) -> Iterator[tuple[str, int | None]]:
+    settings = get_settings()
+    request_data = {
+        "model": settings.deepseek_model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.2,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    saw_done = False
+    try:
+        timeout = httpx.Timeout(60.0, connect=10.0)
+        with httpx.Client(timeout=timeout) as client:
+            with client.stream(
+                "POST",
+                f"{settings.deepseek_base_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                json=request_data,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        saw_done = True
+                        break
+                    if not data:
+                        continue
+                    chunk = json.loads(data)
+                    if not isinstance(chunk, dict):
+                        raise ValueError("DeepSeek returned an invalid stream chunk")
+                    usage = chunk.get("usage")
+                    if usage is not None and not isinstance(usage, dict):
+                        raise ValueError("DeepSeek returned invalid stream usage")
+                    total_tokens = usage.get("total_tokens") if isinstance(usage, dict) else None
+                    if total_tokens is not None and (
+                        not isinstance(total_tokens, int) or isinstance(total_tokens, bool) or total_tokens < 0
+                    ):
+                        raise ValueError("DeepSeek returned invalid stream usage")
+                    choices = chunk.get("choices", [])
+                    if not isinstance(choices, list):
+                        raise ValueError("DeepSeek returned invalid stream choices")
+                    content = ""
+                    if choices:
+                        if not isinstance(choices[0], dict):
+                            raise ValueError("DeepSeek returned invalid stream choice")
+                        delta = choices[0].get("delta", {})
+                        if not isinstance(delta, dict):
+                            raise ValueError("DeepSeek returned invalid stream delta")
+                        content = delta.get("content", "")
+                        if not isinstance(content, str):
+                            raise ValueError("DeepSeek returned invalid stream content")
+                    if content or total_tokens is not None:
+                        yield content, total_tokens
+    except httpx.HTTPStatusError as error:
+        logger.warning("DeepSeek stream returned HTTP %s", error.response.status_code)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="DeepSeek request failed") from error
+    except (httpx.HTTPError, ValueError) as error:
+        logger.warning("DeepSeek stream failed: %s", error)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="DeepSeek service returned an invalid stream") from error
+    if not saw_done:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="DeepSeek stream ended unexpectedly")
+
+
 def _finish_usage(db: Session, user_id: int, month: str, reservation: int, actual_tokens: int, quota: int) -> bool:
     usage = db.scalar(
         select(AIMonthlyUsage)
@@ -198,8 +266,16 @@ def clear_chat_history(user: User = Depends(get_current_user), db: Session = Dep
     return {"message": "conversation cleared"}
 
 
+def _sse_event(event: dict[str, object]) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
 @router.post("/chat")
-def chat(payload: AIChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+def chat(
+    payload: AIChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
     settings = get_settings()
     if not settings.deepseek_api_key:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="DeepSeek API is not configured")
@@ -230,39 +306,96 @@ def chat(payload: AIChatRequest, user: User = Depends(get_current_user), db: Ses
     reservation = available
     usage.reserved_tokens += reservation
     db.commit()
-    actual_tokens = 0
     try:
         classifier_result, classifier_tokens = _deepseek_chat(classifier_messages, CLASSIFIER_OUTPUT_TOKENS)
-        actual_tokens += classifier_tokens
-        try:
-            decision = json.loads(classifier_result)
-            allowed = decision.get("allowed") is True if isinstance(decision, dict) else False
-        except json.JSONDecodeError:
-            allowed = False
-
-        if allowed:
-            answer, answer_tokens = _deepseek_chat(answer_messages, answer_token_cap)
-            actual_tokens += answer_tokens
-        else:
-            answer = REFUSAL
     except HTTPException:
-        _finish_usage(db, user.id, month, reservation, actual_tokens, settings.monthly_ai_token_quota)
+        _finish_usage(db, user.id, month, reservation, 0, settings.monthly_ai_token_quota)
         raise
 
-    over_quota = _finish_usage(db, user.id, month, reservation, actual_tokens, settings.monthly_ai_token_quota)
-    if over_quota:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="monthly AI token quota is exhausted")
+    try:
+        decision = json.loads(classifier_result)
+        allowed = decision.get("allowed") is True if isinstance(decision, dict) else False
+    except json.JSONDecodeError:
+        allowed = False
 
-    conversation = _ensure_conversation(db, user.id)
-    conversation.messages = [*history, {"role": "user", "content": payload.message}, {"role": "assistant", "content": answer}][-HISTORY_MESSAGE_LIMIT:]
-    db.commit()
+    def stream() -> Iterator[str]:
+        answer_parts: list[str] = []
+        answer_tokens: int | None = None
+        finalized = False
 
-    used, remaining = _quota_response(db, user.id, month)
-    return {
-        "answer": answer,
-        "month": month,
-        "used_tokens": used,
-        "monthly_token_quota": settings.monthly_ai_token_quota,
-        "remaining_tokens": remaining,
-        "tokens_used": actual_tokens,
-    }
+        def finish(actual_tokens: int) -> bool:
+            nonlocal finalized
+            over_quota = _finish_usage(db, user.id, month, reservation, actual_tokens, settings.monthly_ai_token_quota)
+            finalized = True
+            return over_quota
+
+        def partial_answer_tokens() -> int:
+            if answer_tokens is not None:
+                return answer_tokens
+            if allowed and answer_parts:
+                return (
+                    _estimate_input_tokens(answer_messages)
+                    + _estimate_input_tokens([{"role": "assistant", "content": "".join(answer_parts)}])
+                )
+            return 0
+
+        try:
+            if allowed:
+                for content, total_tokens in _deepseek_chat_stream(answer_messages, answer_token_cap):
+                    if content:
+                        answer_parts.append(content)
+                        yield _sse_event({"type": "delta", "content": content})
+                    if total_tokens is not None:
+                        answer_tokens = total_tokens
+            else:
+                answer_parts.append(REFUSAL)
+                yield _sse_event({"type": "delta", "content": REFUSAL})
+
+            answer = "".join(answer_parts)
+            if answer_tokens is None:
+                answer_tokens = (
+                    _estimate_input_tokens(answer_messages)
+                    + _estimate_input_tokens([{"role": "assistant", "content": answer}])
+                    if allowed
+                    else 0
+                )
+            actual_tokens = classifier_tokens + answer_tokens
+            if finish(actual_tokens):
+                yield _sse_event({"type": "error", "message": "monthly AI token quota is exhausted"})
+                return
+
+            conversation = _ensure_conversation(db, user.id)
+            conversation.messages = [
+                *history,
+                {"role": "user", "content": payload.message},
+                {"role": "assistant", "content": answer},
+            ][-HISTORY_MESSAGE_LIMIT:]
+            db.commit()
+
+            used, remaining = _quota_response(db, user.id, month)
+            yield _sse_event({
+                "type": "done",
+                "answer": answer,
+                "month": month,
+                "used_tokens": used,
+                "monthly_token_quota": settings.monthly_ai_token_quota,
+                "remaining_tokens": remaining,
+                "tokens_used": actual_tokens,
+            })
+        except HTTPException as error:
+            if not finalized:
+                finish(classifier_tokens + partial_answer_tokens())
+            yield _sse_event({"type": "error", "message": error.detail})
+        finally:
+            if not finalized:
+                finish(classifier_tokens + partial_answer_tokens())
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "X-Access-Token": create_access_token(user.id),
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

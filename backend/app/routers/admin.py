@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_user, get_superuser
 from ..db import get_db
 from ..models import BlockedSite, Favorite, PlaybackProgress, User, UserSite, WatchLater
 from ..realtime import playback_manager
@@ -36,8 +36,11 @@ from ..schemas import (
     FavoriteCreateRequest,
     FavoriteItem,
     FavoriteListResponse,
+    ManagedUserInfo,
+    ManagedUserListResponse,
     SiteRequest,
     SiteInfo,
+    UserStatusUpdateRequest,
     WatchLaterCreateRequest,
     WatchLaterItem,
     WatchLaterListResponse,
@@ -70,6 +73,55 @@ def delete_owned_records(db: Session, model, ids: list[int], user_id: int) -> in
     result = db.query(model).filter(model.user_id == user_id, model.id.in_(set(ids))).delete(synchronize_session=False)
     db.commit()
     return result
+
+
+@router.get("/users", response_model=ManagedUserListResponse)
+def list_users(
+    role: str = Query(default="regular", pattern="^(regular|superadmin)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _admin: User = Depends(get_superuser),
+    db: Session = Depends(get_db),
+) -> ManagedUserListResponse:
+    query = select(User).where(User.is_superuser.is_(role == "superadmin"))
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    users = db.scalars(
+        query.order_by(User.created_at.desc(), User.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return ManagedUserListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            ManagedUserInfo(
+                id=user.id,
+                username=user.username,
+                created_at=as_utc(user.created_at),
+                is_superuser=user.is_superuser,
+                is_active=user.is_active,
+            )
+            for user in users
+        ],
+    )
+
+
+@router.patch("/users/{user_id}/status")
+def update_user_status(
+    user_id: int,
+    payload: UserStatusUpdateRequest,
+    admin: User = Depends(get_superuser),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    if user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="superuser account status cannot be changed here")
+    user.is_active = payload.is_active
+    db.commit()
+    return {"id": user.id, "is_active": user.is_active}
 
 
 @router.get("/platforms", response_model=list[SiteInfo])

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.14
+// @version      0.1.15
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -51,7 +51,8 @@ See LICENSE file in repository root for full license text.
         #crossvideo-root { position: fixed; z-index: 2147483647; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18212b; }
         #crossvideo-root * { box-sizing: border-box; }
         .cv-overlay { position: fixed; inset: 0; display: grid; align-items: start; justify-items: center; padding: 8vh 20px 20px; background: rgba(12, 18, 24, .62); }
-        .cv-card { width: min(440px, 100%); max-height: min(720px, 90vh); overflow: hidden; background: #f6f4ed; border: 1px solid #d8d2c4; border-radius: 12px; box-shadow: 0 20px 70px rgba(0,0,0,.3); padding: 24px; }
+        .cv-card { width: min(440px, 100%); max-height: min(720px, 90vh); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; background: #f6f4ed; border: 1px solid #d8d2c4; border-radius: 12px; box-shadow: 0 20px 70px rgba(0,0,0,.3); padding: 24px; }
+        .cv-card::-webkit-scrollbar { display: none; }
         .cv-history-card { max-height: min(720px, 90vh); }
         .cv-card h2 { margin: 0 0 18px; font: 700 24px/1.1 Georgia, serif; }
         .cv-tabs { display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 1px solid #d8d2c4; }

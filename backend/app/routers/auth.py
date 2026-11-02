@@ -90,6 +90,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse
     now = datetime.now(UTC)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account is disabled")
     locked_until = as_utc(user.locked_until)
     if locked_until and locked_until > now:
         retry_after = int((locked_until - now).total_seconds()) + 1
@@ -120,7 +122,7 @@ def complete_two_factor_login(payload: TwoFactorLoginRequest, db: Session = Depe
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired two-factor challenge") from None
 
     user = db.get(User, user_id)
-    if user is None or not user.totp_enabled or not verify_totp(user.totp_secret, payload.code):
+    if user is None or not user.is_active or not user.totp_enabled or not verify_totp(user.totp_secret, payload.code):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authenticator code")
     return TokenResponse(access_token=create_access_token(user.id), username=user.username)
 
@@ -131,6 +133,8 @@ def get_profile(user: User = Depends(get_current_user), db: Session = Depends(ge
         id=user.id,
         username=user.username,
         created_at=as_utc(user.created_at),
+        is_superuser=user.is_superuser,
+        is_active=user.is_active,
         history_count=db.scalar(select(func.count(PlaybackProgress.id)).where(PlaybackProgress.user_id == user.id)) or 0,
         favorites_count=db.scalar(select(func.count(Favorite.id)).where(Favorite.user_id == user.id)) or 0,
         watch_later_count=db.scalar(select(func.count(WatchLater.id)).where(WatchLater.user_id == user.id)) or 0,
@@ -190,7 +194,7 @@ def request_email_verification(payload: EmailRequest, user: User = Depends(get_c
         target_email=email,
         expires_at=datetime.now(UTC) + timedelta(hours=24),
     ))
-    send_action_email(email, "CrossVideo 邮箱验证", "verify-email", token, "email_verify.html")
+    send_action_email(db, user.id, "verify_email", email, "CrossVideo 邮箱验证", "verify-email", token, "email_verify.html")
     db.commit()
     return {"message": "verification email sent"}
 
@@ -241,7 +245,12 @@ def request_password_reset(payload: EmailRequest, db: Session = Depends(get_db))
             purpose="reset_password",
             expires_at=datetime.now(UTC) + timedelta(minutes=30),
         ))
-        send_action_email(email, "CrossVideo 密码重置", "reset-password", token, "email_reset_password.html")
+        try:
+            send_action_email(db, user.id, "reset_password", email, "CrossVideo 密码重置", "reset-password", token, "email_reset_password.html")
+        except HTTPException as error:
+            if error.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+                raise
+            return {"message": "if the verified email exists, a reset link has been sent"}
         db.commit()
     return {"message": "if the verified email exists, a reset link has been sent"}
 

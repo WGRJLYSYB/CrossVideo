@@ -32,6 +32,8 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp())
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -105,6 +107,16 @@ class EmailActionToken(Base):
     target_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EmailSendAttempt(Base):
+    __tablename__ = "email_send_attempts"
+    __table_args__ = (Index("idx_email_send_user_purpose_sent", "user_id", "purpose", "sent_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    purpose: Mapped[str] = mapped_column(String(32))
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
 
 
 class AIConversation(Base):
