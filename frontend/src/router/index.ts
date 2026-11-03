@@ -61,6 +61,12 @@ const router = createRouter({
           meta: { requiresAuth: true, title: '观看历史' },
         },
         {
+          path: 'media-progress',
+          name: 'media-progress',
+          component: () => import('@/views/MediaProgressView.vue'),
+          meta: { requiresAuth: true, title: '影视进度' },
+        },
+        {
           path: 'favorites',
           name: 'favorites',
           component: () => import('@/views/favorites/FavoritesView.vue'),

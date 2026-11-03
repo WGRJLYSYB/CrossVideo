@@ -19,6 +19,7 @@ from sqlalchemy import select
 from .auth import create_access_token
 from .config import get_settings
 from .db import SessionLocal
+from .media import parse_media_title
 from .models import User
 
 router = APIRouter()
@@ -37,6 +38,7 @@ class PlaybackConnection:
     site_host: str | None = None
     url_hash: str | None = None
     title: str = ""
+    media_key: tuple[str, int, int] | None = None
     playing: bool = False
     play_started_at: datetime | None = None
 
@@ -68,13 +70,21 @@ class PlaybackManager:
         if url_hash is not None and (not isinstance(url_hash, str) or not HASH_PATTERN.fullmatch(url_hash)):
             return
 
+        title = message.get("title", "")
+        title = title[:1000] if isinstance(title, str) else ""
+        parsed_media = parse_media_title(title) if title else None
+        media_key = (
+            (parsed_media.title_key, parsed_media.season, parsed_media.episode)
+            if parsed_media is not None
+            else None
+        )
         pause_targets: list[PlaybackConnection] = []
         with self.lock:
             connection.last_heartbeat = now
             connection.site_host = host.lower() if isinstance(host, str) else None
             connection.url_hash = url_hash.lower() if isinstance(url_hash, str) else None
-            title = message.get("title", "")
-            connection.title = title[:1000] if isinstance(title, str) else ""
+            connection.title = title
+            connection.media_key = media_key
             if kind == "play":
                 connection.playing = True
                 connection.play_started_at = now
@@ -83,8 +93,10 @@ class PlaybackManager:
                         other.user_id == connection.user_id
                         and other.websocket is not connection.websocket
                         and other.playing
-                        and other.site_host == connection.site_host
-                        and other.url_hash == connection.url_hash
+                        and (
+                            (other.site_host == connection.site_host and other.url_hash == connection.url_hash)
+                            or (connection.media_key is not None and other.media_key == connection.media_key)
+                        )
                     ):
                         other.playing = False
                         pause_targets.append(other)
@@ -95,7 +107,7 @@ class PlaybackManager:
 
         for other in pause_targets:
             try:
-                await other.websocket.send_json({"type": "pause", "site_host": connection.site_host, "url_hash": connection.url_hash})
+                await other.websocket.send_json({"type": "pause", "site_host": other.site_host, "url_hash": other.url_hash})
             except (RuntimeError, WebSocketDisconnect):
                 await self.disconnect(other.websocket)
 

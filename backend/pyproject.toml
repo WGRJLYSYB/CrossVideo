@@ -22,6 +22,7 @@ dependencies = [
     "uvicorn[standard]>=0.30,<1.0",
     "sentry-sdk>=2.71.0",
     "httpx2>=2.16.0",
+    "guessit>=4.4.0",
 ]
 
 [project.scripts]

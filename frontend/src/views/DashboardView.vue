@@ -41,10 +41,10 @@ See LICENSE file in repository root for full license text.
             </div>
           </div>
           <div class="grid gap-1">
-            <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100/0">
               <div class="h-full rounded-full bg-indigo-500" :style="{ width: `${videoPercent(site.video_count)}%` }" />
             </div>
-            <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100/0">
               <div class="h-full rounded-full bg-emerald-500" :style="{ width: `${timePercent(site.watched_seconds)}%` }" />
             </div>
           </div>

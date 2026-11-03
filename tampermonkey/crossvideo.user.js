@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.15
+// @version      0.1.16
 // @description  在不同网站和设备之间同步 HTML5 视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -210,7 +210,7 @@ See LICENSE file in repository root for full license text.
             }, '*');
         } else if (window.top === window && message?.type === RESUME_TOAST_REQUEST && event.source
             && typeof message.requestId === 'string' && Number.isFinite(message.progress)) {
-            showBridgedToast(message.progress, event.source, message.requestId);
+            showBridgedToast(message.progress, event.source, message.requestId, Boolean(message.crossSite));
         } else if (window.top !== window && event.source === window.top && message?.type === PAGE_INFO_RESPONSE) {
             const resolve = pendingPageInfo.get(message.requestId);
             if (resolve && typeof message.url === 'string' && typeof message.title === 'string') {
@@ -324,7 +324,7 @@ See LICENSE file in repository root for full license text.
         window.setTimeout(() => notice.remove(), 2200);
     };
 
-    const showToast = (progress, duration, video, session) => {
+    const showToast = (progress, duration, video, session, crossSite = false) => {
         removeToast();
         if (window.top !== window) {
             const requestId = `${Date.now()}-${++pendingResumeToastId}`;
@@ -341,12 +341,15 @@ See LICENSE file in repository root for full license text.
                     session.restored = true;
                 },
             };
-            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress }, '*');
+            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress, crossSite }, '*');
             return;
         }
         const toast = document.createElement('div');
         toast.className = 'cv-toast';
-        toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
+        const prompt = crossSite
+            ? `检测到跨站视频进度，是否恢复？（${formatTime(progress)}）`
+            : `💡 检测到您上次观看至 ${formatTime(progress)}`;
+        toast.innerHTML = `<strong>${prompt}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
         const positionToast = () => {
             const bounds = video.getBoundingClientRect();
             toast.style.left = `${bounds.left + bounds.width / 2}px`;
@@ -384,11 +387,14 @@ See LICENSE file in repository root for full license text.
         expirationTimer = window.setTimeout(dismiss, 6000);
     };
 
-    const showBridgedToast = (progress, frameWindow, requestId) => {
+    const showBridgedToast = (progress, frameWindow, requestId, crossSite = false) => {
         removeToast();
         const toast = document.createElement('div');
         toast.className = 'cv-toast';
-        toast.innerHTML = `<strong>💡 检测到您上次观看至 ${formatTime(progress)}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
+        const prompt = crossSite
+            ? `检测到跨站视频进度，是否恢复？（${formatTime(progress)}）`
+            : `💡 检测到您上次观看至 ${formatTime(progress)}`;
+        toast.innerHTML = `<strong>${prompt}</strong><div><button class="cv-button">跳转恢复</button> <button class="cv-button secondary">取消（6秒）</button></div>`;
         const positionToast = () => {
             const frame = [...document.querySelectorAll('iframe, frame')].find((element) => element.contentWindow === frameWindow);
             if (frame) {
@@ -459,8 +465,8 @@ See LICENSE file in repository root for full license text.
     const query = async (session) => {
         try {
             if (!await updateSessionPageInfo(session)) return;
-            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}`);
-            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showToast(result.progress_seconds, session.video.duration, session.video, session);
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}&title=${encodeURIComponent(session.title)}`);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showToast(result.progress_seconds, session.video.duration, session.video, session, result.cross_site);
         } catch (_) { /* Anonymous or offline pages remain usable. */ }
     }
 

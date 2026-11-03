@@ -39,6 +39,7 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     totp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
     progress: Mapped[list["PlaybackProgress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    media_progress: Mapped[list["MediaProgress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     blocked_sites: Mapped[list["BlockedSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     site_visits: Mapped[list["UserSite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     favorites: Mapped[list["Favorite"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -51,6 +52,11 @@ class PlaybackProgress(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    media_progress_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media_progress.id", ondelete="SET NULL", name="fk_playback_progress_media_progress_id"),
+        nullable=True,
+        index=True,
+    )
     site_host: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     url_hash: Mapped[str] = mapped_column(String(64))
     clean_url: Mapped[str] = mapped_column(Text)
@@ -62,6 +68,30 @@ class PlaybackProgress(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp())
     user: Mapped[User] = relationship(back_populates="progress")
+    media_progress: Mapped["MediaProgress | None"] = relationship(back_populates="url_progress")
+
+
+class MediaProgress(Base):
+    __tablename__ = "media_progress"
+    __table_args__ = (
+        Index("idx_media_user_title_season_episode", "user_id", "title_key", "season", "episode", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(1000))
+    title_key: Mapped[str] = mapped_column(String(64))
+    season: Mapped[int] = mapped_column(Integer)
+    episode: Mapped[int] = mapped_column(Integer)
+    last_url_hash: Mapped[str] = mapped_column(String(64))
+    progress_seconds: Mapped[float] = mapped_column(Float)
+    duration: Mapped[float] = mapped_column(Float)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    client_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    user: Mapped[User] = relationship(back_populates="media_progress")
+    url_progress: Mapped[list[PlaybackProgress]] = relationship(back_populates="media_progress")
 
 
 class BlockedSite(Base):

@@ -17,7 +17,7 @@
         :show-text="false"
         :status="state.remaining_tokens === 0 ? 'exception' : undefined"
       />
-      <div ref="messageList" class="h-[48vh] min-h-64 space-y-4 overflow-y-auto rounded-xl bg-slate-950/50 p-4">
+      <div ref="messageList" class="h-[48vh] min-h-64 space-y-4 overflow-y-auto rounded-xl p-4 message-list">
         <div v-if="!messages.length" class="flex h-full items-center justify-center text-center text-sm text-slate-500">
           可以讨论电影、电视剧、动画的剧情、人物、演员、评价或推荐。
         </div>
@@ -29,7 +29,7 @@
         >
           <div
             class="max-w-[88%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-6"
-            :class="message.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'"
+            :class="message.role === 'user' ? 'bg-indigo-600 text-white' : 'ai-message'"
           >
             <div v-if="message.role === 'assistant'" class="markdown-content" v-html="renderMarkdown(message.content)" />
             <template v-else>{{ message.content }}</template>
@@ -166,6 +166,16 @@ watch(() => props.modelValue, (opened) => {
 </script>
 
 <style scoped>
+.message-list {
+    scrollbar-width: thin;
+    border: 1px solid var(--el-border-color);
+}
+
+.ai-message {
+    background-color: var(--el-color-primary-light-9);
+    color: var(--el-text-color-primary);
+}
+
 .markdown-content :deep(p) {
   margin: 0.35rem 0;
 }

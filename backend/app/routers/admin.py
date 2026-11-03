@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, get_superuser
 from ..db import get_db
+from ..media_progress import refresh_media_progress
 from ..models import BlockedSite, Favorite, PlaybackProgress, User, UserSite, WatchLater
 from ..realtime import playback_manager
 from ..schemas import (
@@ -70,7 +71,21 @@ def extract_host(url: str, fallback_host: str | None = None) -> str | None:
 
 
 def delete_owned_records(db: Session, model, ids: list[int], user_id: int) -> int:
+    media_progress_ids: set[int] = set()
+    if model is PlaybackProgress:
+        media_progress_ids = {
+            item.media_progress_id
+            for item in db.scalars(
+                select(PlaybackProgress).where(
+                    PlaybackProgress.user_id == user_id,
+                    PlaybackProgress.id.in_(set(ids)),
+                )
+            ).all()
+            if item.media_progress_id is not None
+        }
     result = db.query(model).filter(model.user_id == user_id, model.id.in_(set(ids))).delete(synchronize_session=False)
+    if media_progress_ids:
+        refresh_media_progress(db, media_progress_ids)
     db.commit()
     return result
 
@@ -197,10 +212,18 @@ def add_admin_blocked_site(payload: SiteRequest, user: User = Depends(get_curren
     blocked = db.scalar(select(BlockedSite).where(BlockedSite.user_id == user.id, BlockedSite.site_host == host))
     if blocked is None:
         db.add(BlockedSite(user_id=user.id, site_host=host))
+        removed = db.scalars(
+            select(PlaybackProgress).where(
+                PlaybackProgress.user_id == user.id,
+                PlaybackProgress.site_host == host,
+            )
+        ).all()
+        media_progress_ids = {item.media_progress_id for item in removed if item.media_progress_id is not None}
         db.query(PlaybackProgress).filter(
             PlaybackProgress.user_id == user.id,
             PlaybackProgress.site_host == host,
         ).delete(synchronize_session=False)
+        refresh_media_progress(db, media_progress_ids)
         db.commit()
     return {"status": "blocked", "site_host": host}
 
@@ -295,7 +318,11 @@ def delete_history_item(
     record = db.scalar(select(PlaybackProgress).where(PlaybackProgress.id == history_id, PlaybackProgress.user_id == user.id))
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="History record not found")
+    media_progress_id = record.media_progress_id
     db.delete(record)
+    db.flush()
+    if media_progress_id is not None:
+        refresh_media_progress(db, {media_progress_id})
     db.commit()
     return {"status": "deleted", "id": str(history_id)}
 
@@ -310,7 +337,16 @@ def clear_all_history(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    media_progress_ids = set(
+        db.scalars(
+            select(PlaybackProgress.media_progress_id).where(
+                PlaybackProgress.user_id == user.id,
+                PlaybackProgress.media_progress_id.is_not(None),
+            )
+        ).all()
+    )
     db.query(PlaybackProgress).filter(PlaybackProgress.user_id == user.id).delete(synchronize_session=False)
+    refresh_media_progress(db, media_progress_ids)
     db.commit()
     return {"status": "cleared"}
 

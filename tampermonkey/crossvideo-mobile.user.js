@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CrossVideo Mobile 跨平台观看进度同步
 // @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.17
+// @version      0.1.18
 // @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
 // @author       WGRJLYSYB
 // @license      AGPL-3.0
@@ -197,7 +197,7 @@ See LICENSE file in repository root for full license text.
             }, '*');
         } else if (window.top === window && message?.type === RESUME_TOAST_REQUEST && event.source
             && typeof message.requestId === 'string' && Number.isFinite(message.progress)) {
-            showBridgedToast(message.progress, event.source, message.requestId);
+            showBridgedToast(message.progress, event.source, message.requestId, Boolean(message.crossSite));
         } else if (window.top !== window && event.source === window.top && message?.type === PAGE_INFO_RESPONSE) {
             const resolve = pendingPageInfo.get(message.requestId);
             if (resolve && typeof message.url === 'string' && typeof message.title === 'string') {
@@ -289,7 +289,7 @@ See LICENSE file in repository root for full license text.
         bridgedToastCleanup?.();
         root.querySelector('.cv-mobile-toast')?.remove();
     };
-    const showResumeToast = (progress, video) => {
+    const showResumeToast = (progress, video, crossSite = false) => {
         removeToast();
         if (window.top !== window) {
             const requestId = `${Date.now()}-${++pendingResumeToastId}`;
@@ -305,12 +305,15 @@ See LICENSE file in repository root for full license text.
                     video.play().catch(() => {});
                 },
             };
-            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress }, '*');
+            window.top.postMessage({ type: RESUME_TOAST_REQUEST, requestId, progress, crossSite }, '*');
             return;
         }
         const toast = document.createElement('div');
         toast.className = 'cv-mobile-toast';
-        toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
+        const prompt = crossSite
+            ? `检测到跨站视频进度，是否恢复？（${formatTime(progress)}）`
+            : `检测到上次观看至 ${formatTime(progress)}`;
+        toast.innerHTML = `<strong>${prompt}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
         const position = () => {
             const bounds = video.getBoundingClientRect();
             toast.style.left = `${bounds.left + bounds.width / 2}px`;
@@ -329,11 +332,14 @@ See LICENSE file in repository root for full license text.
         expiry = setTimeout(dismiss, 6000);
         root.appendChild(toast);
     };
-    const showBridgedToast = (progress, frameWindow, requestId) => {
+    const showBridgedToast = (progress, frameWindow, requestId, crossSite = false) => {
         removeToast();
         const toast = document.createElement('div');
         toast.className = 'cv-mobile-toast';
-        toast.innerHTML = `<strong>检测到上次观看至 ${formatTime(progress)}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
+        const prompt = crossSite
+            ? `检测到跨站视频进度，是否恢复？（${formatTime(progress)}）`
+            : `检测到上次观看至 ${formatTime(progress)}`;
+        toast.innerHTML = `<strong>${prompt}</strong><div><button class="cv-mobile-button">跳转恢复</button> <button class="cv-mobile-button secondary">取消（6秒）</button></div>`;
         const position = () => {
             const frame = [...document.querySelectorAll('iframe, frame')].find((element) => element.contentWindow === frameWindow);
             if (frame) {
@@ -535,8 +541,8 @@ See LICENSE file in repository root for full license text.
         if (!session || !token()) return;
         try {
             if (!await updateSessionPageInfo(session)) return;
-            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}`);
-            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showResumeToast(result.progress_seconds, session.video);
+            const result = await request('GET', `/progress/query?url_hash=${session.urlHash}&site_host=${encodeURIComponent(session.siteHost)}&title=${encodeURIComponent(session.title)}`);
+            if (result.found && result.progress_seconds > 0 && result.progress_seconds < session.video.duration * 0.95 && Math.abs(result.progress_seconds - session.video.currentTime) > 5) showResumeToast(result.progress_seconds, session.video, result.cross_site);
         } catch (_) { /* Ignore unavailable resume queries on mobile networks. */ }
     };
 

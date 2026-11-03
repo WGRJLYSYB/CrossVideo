@@ -24,8 +24,10 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..db import get_db
-from ..models import BlockedSite, PlaybackProgress, User, UserSite
-from ..schemas import ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
+from ..media import parse_media_title
+from ..media_progress import refresh_media_progress, save_media_progress
+from ..models import BlockedSite, MediaProgress, PlaybackProgress, User, UserSite
+from ..schemas import MediaProgressItem, MediaProgressListResponse, ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
 from ..site_tasks import fetch_and_save_site_title
 
 router = APIRouter(prefix="/progress", tags=["progress"])
@@ -58,13 +60,17 @@ def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTask
     completed = progress_seconds / payload.duration >= 0.95
     incoming_time = as_utc(payload.client_updated_at) or datetime.now(UTC)
     observed_at = datetime.now(UTC)
-    existing = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == payload.url_hash))
+    url_hash = payload.url_hash.lower()
+    existing = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == url_hash))
     host = payload.site_host.lower()
+    parsed_media = parse_media_title(payload.title)
+    media_progress_id = existing.media_progress_id if existing is not None else None
 
     if existing is None:
-        existing = PlaybackProgress(user_id=user.id, url_hash=payload.url_hash, site_host=host, clean_url=payload.clean_url, title=payload.title, progress_seconds=0 if completed else progress_seconds, duration=payload.duration, completed=completed, client_updated_at=incoming_time)
+        existing = PlaybackProgress(user_id=user.id, url_hash=url_hash, site_host=host, clean_url=payload.clean_url, title=payload.title, progress_seconds=0 if completed else progress_seconds, duration=payload.duration, completed=completed, client_updated_at=incoming_time)
         db.add(existing)
         watched_delta = min(progress_seconds, 30.0)
+        accepted_update = True
     else:
         stored_time = as_utc(existing.client_updated_at)
         should_update = stored_time is None or incoming_time >= stored_time or progress_seconds > existing.progress_seconds
@@ -77,8 +83,42 @@ def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTask
             existing.duration = payload.duration
             existing.completed = completed
             existing.client_updated_at = incoming_time
+            accepted_update = True
         else:
             watched_delta = 0.0
+            accepted_update = False
+
+    if parsed_media is not None:
+        media_state = existing
+        if accepted_update:
+            media_seconds = 0 if completed else progress_seconds
+            media_duration = payload.duration
+            media_completed = completed
+            media_client_updated_at = incoming_time
+        else:
+            media_seconds = media_state.progress_seconds
+            media_duration = media_state.duration
+            media_completed = media_state.completed
+            media_client_updated_at = as_utc(media_state.client_updated_at)
+        media = save_media_progress(
+            db,
+            user_id=user.id,
+            media=parsed_media,
+            url_hash=url_hash,
+            progress_seconds=media_seconds,
+            duration=media_duration,
+            completed=media_completed,
+            client_updated_at=media_client_updated_at,
+        )
+        existing.media_progress_id = media.id
+        if media_progress_id is not None and media_progress_id != media.id:
+            db.flush()
+            refresh_media_progress(db, {media_progress_id})
+    elif existing.media_progress_id is not None:
+        media_progress_id = existing.media_progress_id
+        existing.media_progress_id = None
+        db.flush()
+        refresh_media_progress(db, {media_progress_id})
 
     site_name = next((name for domain, name in SITE_NAMES.items() if host == domain or host.endswith(f".{domain}")), host)
     insert_site = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
@@ -107,14 +147,71 @@ def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTask
     return {"status": "success", "message": "Progress updated"}
 
 
-@router.get("/query", response_model=ProgressQueryResponse)
-def query_progress(url_hash: str = Query(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$"), site_host: str | None = Query(default=None, max_length=255), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ProgressQueryResponse:
+@router.get("/query", response_model=ProgressQueryResponse, response_model_exclude_unset=True)
+def query_progress(url_hash: str = Query(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$"), site_host: str | None = Query(default=None, max_length=255), title: str | None = Query(default=None, max_length=1000), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ProgressQueryResponse:
     if site_host and db.scalar(select(BlockedSite).where(BlockedSite.user_id == user.id, BlockedSite.site_host == site_host.lower())) is not None:
-        return ProgressQueryResponse(found=False)
-    progress = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == url_hash))
+        return ProgressQueryResponse(found=False, progress_seconds=None, duration=None, updated_at=None)
+    parsed_media = parse_media_title(title) if title else None
+    if parsed_media is not None:
+        media = db.scalar(
+            select(MediaProgress).where(
+                MediaProgress.user_id == user.id,
+                MediaProgress.title_key == parsed_media.title_key,
+                MediaProgress.season == parsed_media.season,
+                MediaProgress.episode == parsed_media.episode,
+            )
+        )
+        if media is not None and media.last_url_hash.lower() != url_hash.lower():
+            if media.completed:
+                return ProgressQueryResponse(found=False, progress_seconds=None, duration=None, updated_at=None)
+            return ProgressQueryResponse(
+                found=True,
+                progress_seconds=media.progress_seconds,
+                duration=media.duration,
+                updated_at=as_utc(media.updated_at),
+                cross_site=True,
+            )
+    progress = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == url_hash.lower()))
     if progress is None or progress.completed:
-        return ProgressQueryResponse(found=False)
-    return ProgressQueryResponse(found=True, progress_seconds=progress.progress_seconds, duration=progress.duration, updated_at=as_utc(progress.updated_at))
+        return ProgressQueryResponse(found=False, progress_seconds=None, duration=None, updated_at=None)
+    return ProgressQueryResponse(found=True, progress_seconds=progress.progress_seconds, duration=progress.duration, updated_at=as_utc(progress.updated_at), cross_site=False)
+
+
+@router.get("/media-list", response_model=MediaProgressListResponse)
+def list_media_progress(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    search: str | None = Query(default=None, max_length=200),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MediaProgressListResponse:
+    base_query = select(MediaProgress).where(MediaProgress.user_id == user.id)
+    if search and search.strip():
+        base_query = base_query.where(MediaProgress.title.ilike(f"%{search.strip()}%"))
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    items = db.scalars(
+        base_query.order_by(MediaProgress.updated_at.desc(), MediaProgress.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return MediaProgressListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            MediaProgressItem(
+                id=item.id,
+                title=item.title,
+                season=item.season,
+                episode=item.episode,
+                progress_seconds=item.progress_seconds,
+                duration=item.duration,
+                updated_at=as_utc(item.updated_at),
+                completed=item.completed,
+            )
+            for item in items
+        ],
+    )
 
 
 @router.get("/list", response_model=ProgressListResponse)
@@ -135,7 +232,11 @@ def delete_progress(progress_id: int, user: User = Depends(get_current_user), db
     progress = db.scalar(select(PlaybackProgress).where(PlaybackProgress.id == progress_id, PlaybackProgress.user_id == user.id))
     if progress is None:
         return {"status": "not_found"}
+    media_progress_id = progress.media_progress_id
     db.delete(progress)
+    db.flush()
+    if media_progress_id is not None:
+        refresh_media_progress(db, {media_progress_id})
     db.commit()
     return {"status": "deleted"}
 
@@ -150,7 +251,12 @@ def block_site(payload: SiteRequest, user: User = Depends(get_current_user), db:
     host = payload.site_host.lower()
     if db.scalar(select(BlockedSite).where(BlockedSite.user_id == user.id, BlockedSite.site_host == host)) is None:
         db.add(BlockedSite(user_id=user.id, site_host=host))
+        removed = db.scalars(
+            select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.site_host == host)
+        ).all()
+        media_progress_ids = {item.media_progress_id for item in removed if item.media_progress_id is not None}
         db.query(PlaybackProgress).filter(PlaybackProgress.user_id == user.id, PlaybackProgress.site_host == host).delete(synchronize_session=False)
+        refresh_media_progress(db, media_progress_ids)
         db.commit()
     return {"status": "blocked", "site_host": host}
 

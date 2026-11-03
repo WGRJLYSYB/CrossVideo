@@ -10,7 +10,7 @@ CrossVideo Userscript 用于识别网页中的主要 HTML5 视频播放器，并
 ## Features
 
 - Sync HTML5 video progress across devices and supported websites
-- Resume prompt for previously watched videos
+- Resume the latest recognized season and episode across websites
 - Login and registration from the Tampermonkey menu
 - Server-verified click-order CAPTCHA on login and registration, plus authenticator-code login when 2FA is enabled
 - Searchable, paginated playback history
@@ -20,7 +20,7 @@ CrossVideo Userscript 用于识别网页中的主要 HTML5 视频播放器，并
 - Cross-device website blocklist
 - Configurable API address with no server address embedded in the published script
 - Automatic access-token renewal while authenticated requests succeed
-- WebSocket heartbeats with reconnect and same-video playback pause coordination
+- WebSocket heartbeats with reconnect and same-episode playback pause coordination across websites
 - WebSocket connections are re-established while the page remains open; stale connections are closed by the server after five minutes without a heartbeat
 - SPA route changes and dynamic video elements supported
 

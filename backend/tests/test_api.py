@@ -375,3 +375,115 @@ def test_playback_websocket_pauses_only_earlier_same_video():
             live = client.get("/api/v1/admin/dashboard", headers=headers).json()
             assert live["online_device_count"] == 2
             assert [video["title"] for video in live["current_videos"]] == ["Same video"]
+
+
+def test_episode_progress_resumes_across_sites_and_updates_media_list():
+    headers = auth_headers()
+    first = {
+        "url_hash": "1" * 64,
+        "clean_url": "https://a.example/watch/episode",
+        "title": "生活大爆炸第十二季_第16集",
+        "progress_seconds": 1800,
+        "duration": 3000,
+        "site_host": "a.example",
+    }
+    assert client.post("/api/v1/progress/sync", headers=headers, json=first).status_code == 200
+
+    cross_site = client.get(
+        "/api/v1/progress/query",
+        params={
+            "url_hash": "2" * 64,
+            "site_host": "b.example",
+            "title": "生活大爆炸第十二季_第16集",
+        },
+        headers=headers,
+    )
+    assert cross_site.status_code == 200
+    assert cross_site.json()["found"] is True
+    assert cross_site.json()["cross_site"] is True
+    assert cross_site.json()["progress_seconds"] == 1800
+
+    second = {
+        **first,
+        "url_hash": "2" * 64,
+        "clean_url": "https://b.example/watch/episode",
+        "progress_seconds": 2100,
+        "site_host": "b.example",
+    }
+    assert client.post("/api/v1/progress/sync", headers=headers, json=second).status_code == 200
+    resumed = client.get(
+        "/api/v1/progress/query",
+        params={
+            "url_hash": "3" * 64,
+            "site_host": "c.example",
+            "title": "生活大爆炸第十二季_第16集",
+        },
+        headers=headers,
+    ).json()
+    assert resumed["cross_site"] is True
+    assert resumed["progress_seconds"] == 2100
+
+    media_list = client.get("/api/v1/progress/media-list", headers=headers)
+    assert media_list.status_code == 200
+    assert media_list.json()["total"] == 1
+    assert media_list.json()["items"][0]["season"] == 12
+    assert media_list.json()["items"][0]["episode"] == 16
+    assert media_list.json()["items"][0]["title"] == "生活大爆炸"
+    from app.models import MediaProgress, PlaybackProgress
+    with SessionLocal() as db:
+        media = db.query(MediaProgress).one()
+        episode_records = db.query(PlaybackProgress).all()
+        assert len(episode_records) == 2
+        assert all(record.media_progress_id == media.id for record in episode_records)
+
+    completed = {**first, "progress_seconds": 2850}
+    assert client.post("/api/v1/progress/sync", headers=headers, json=completed).status_code == 200
+    no_resume = client.get(
+        "/api/v1/progress/query",
+        params={
+            "url_hash": "2" * 64,
+            "site_host": "b.example",
+            "title": "生活大爆炸第十二季_第16集",
+        },
+        headers=headers,
+    )
+    assert no_resume.json()["found"] is False
+
+
+def test_title_parser_skips_non_numeric_guessit_season_or_episode():
+    from app.media import parse_media_title
+
+    assert parse_media_title("生活大爆炸第十二季_第16集").season == 12
+    assert parse_media_title("综艺片《人生一串第一季》第05期国语在线免费观看全集-天天影视") is None
+
+
+def test_playback_websocket_pauses_same_episode_across_sites():
+    headers = auth_headers()
+    token = headers["Authorization"].removeprefix("Bearer ")
+
+    with client.websocket_connect("/api/v1/ws/playback") as first:
+        first.send_json({"type": "auth", "token": token, "client_id": "site-a"})
+        first.receive_json()
+        first.send_json({
+            "type": "play",
+            "site_host": "a.example",
+            "url_hash": "3" * 64,
+            "title": "老友记第一季第1集",
+        })
+        first.receive_json()
+
+        with client.websocket_connect("/api/v1/ws/playback") as second:
+            second.send_json({"type": "auth", "token": token, "client_id": "site-b"})
+            second.receive_json()
+            second.send_json({
+                "type": "play",
+                "site_host": "b.example",
+                "url_hash": "4" * 64,
+                "title": "老友记 第1季 第1集",
+            })
+            second.receive_json()
+            assert first.receive_json() == {
+                "type": "pause",
+                "site_host": "a.example",
+                "url_hash": "3" * 64,
+            }

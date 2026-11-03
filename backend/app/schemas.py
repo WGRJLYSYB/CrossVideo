@@ -190,6 +190,25 @@ class ProgressQueryResponse(BaseModel):
     progress_seconds: float | None = None
     duration: float | None = None
     updated_at: datetime | None = None
+    cross_site: bool = False
+
+
+class MediaProgressItem(BaseModel):
+    id: int
+    title: str
+    season: int
+    episode: int
+    progress_seconds: float
+    duration: float
+    updated_at: datetime
+    completed: bool
+
+
+class MediaProgressListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[MediaProgressItem]
 
 
 class ProgressItem(BaseModel):
