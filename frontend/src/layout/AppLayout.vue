@@ -128,6 +128,19 @@ See LICENSE file in repository root for full license text.
         </router-link>
 
         <router-link
+          to="/watched-sites"
+          class="flex items-center px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group"
+          :class="isActive('/watched-sites')
+            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+            : isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'"
+        >
+          <div class="flex items-center gap-3">
+            <el-icon :size="17"><Link /></el-icon>
+            <span>观看过的网站</span>
+          </div>
+        </router-link>
+
+        <router-link
           to="/blocked-sites"
           class="flex items-center px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group"
           :class="isActive('/blocked-sites')
@@ -285,7 +298,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { Clock, Star, VideoCamera, SwitchButton, Sunny, Moon, ArrowDown, Refresh, VideoPlay, DataAnalysis, Lock, Setting, ChatDotRound, User } from '@element-plus/icons-vue'
+import { Clock, Star, VideoCamera, SwitchButton, Sunny, Moon, ArrowDown, Refresh, VideoPlay, DataAnalysis, Link, Lock, Setting, ChatDotRound, User } from '@element-plus/icons-vue'
 import AIChatDialog from '@/components/AIChatDialog.vue'
 
 const route = useRoute()

@@ -27,7 +27,7 @@ from ..db import get_db
 from ..media import parse_media_title
 from ..media_progress import refresh_media_progress, save_media_progress
 from ..models import BlockedSite, MediaProgress, PlaybackProgress, User, UserSite
-from ..schemas import MediaProgressItem, MediaProgressListResponse, ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteRequest
+from ..schemas import MediaProgressItem, MediaProgressListResponse, ProgressItem, ProgressListResponse, ProgressQueryResponse, ProgressSyncRequest, SiteInfo, SiteRequest
 from ..site_tasks import fetch_and_save_site_title
 
 router = APIRouter(prefix="/progress", tags=["progress"])
@@ -61,45 +61,84 @@ def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTask
     incoming_time = as_utc(payload.client_updated_at) or datetime.now(UTC)
     observed_at = datetime.now(UTC)
     url_hash = payload.url_hash.lower()
-    existing = db.scalar(select(PlaybackProgress).where(PlaybackProgress.user_id == user.id, PlaybackProgress.url_hash == url_hash))
     host = payload.site_host.lower()
     parsed_media = parse_media_title(payload.title)
-    media_progress_id = existing.media_progress_id if existing is not None else None
+    previous = db.scalar(
+        select(PlaybackProgress).where(
+            PlaybackProgress.user_id == user.id,
+            PlaybackProgress.url_hash == url_hash,
+        )
+    )
+    previous_progress_seconds = previous.progress_seconds if previous is not None else None
+    stored_progress = 0 if completed else progress_seconds
+    insert_progress = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
+    statement = insert_progress(PlaybackProgress).values(
+        user_id=user.id,
+        media_progress_id=None,
+        site_host=host,
+        url_hash=url_hash,
+        clean_url=payload.clean_url,
+        title=payload.title,
+        progress_seconds=stored_progress,
+        duration=payload.duration,
+        completed=completed,
+        client_updated_at=incoming_time,
+        updated_at=observed_at,
+    )
+    excluded = statement.excluded
+    statement = statement.on_conflict_do_update(
+        index_elements=[PlaybackProgress.user_id, PlaybackProgress.url_hash],
+        set_={
+            "site_host": excluded.site_host,
+            "clean_url": excluded.clean_url,
+            "title": excluded.title,
+            "progress_seconds": excluded.progress_seconds,
+            "duration": excluded.duration,
+            "completed": excluded.completed,
+            "client_updated_at": excluded.client_updated_at,
+            "updated_at": excluded.updated_at,
+        },
+        where=(
+            PlaybackProgress.client_updated_at.is_(None)
+            | (excluded.client_updated_at >= PlaybackProgress.client_updated_at)
+            | (progress_seconds > PlaybackProgress.progress_seconds)
+        ),
+    )
+    saved = db.scalar(
+        statement.returning(PlaybackProgress).execution_options(populate_existing=True)
+    )
+    accepted_update = saved is not None
+    if saved is None:
+        saved = db.scalar(
+            select(PlaybackProgress)
+            .where(
+                PlaybackProgress.user_id == user.id,
+                PlaybackProgress.url_hash == url_hash,
+            )
+            .execution_options(populate_existing=True)
+        )
+    if saved is None:
+        raise RuntimeError("The playback progress upsert did not persist a record")
 
-    if existing is None:
-        existing = PlaybackProgress(user_id=user.id, url_hash=url_hash, site_host=host, clean_url=payload.clean_url, title=payload.title, progress_seconds=0 if completed else progress_seconds, duration=payload.duration, completed=completed, client_updated_at=incoming_time)
-        db.add(existing)
+    media_progress_id = saved.media_progress_id
+    if not accepted_update:
+        watched_delta = 0.0
+    elif previous_progress_seconds is None:
         watched_delta = min(progress_seconds, 30.0)
-        accepted_update = True
     else:
-        stored_time = as_utc(existing.client_updated_at)
-        should_update = stored_time is None or incoming_time >= stored_time or progress_seconds > existing.progress_seconds
-        if should_update:
-            watched_delta = min(max(0.0, progress_seconds - existing.progress_seconds), 30.0)
-            existing.clean_url = payload.clean_url
-            existing.site_host = host
-            existing.title = payload.title
-            existing.progress_seconds = 0 if completed else progress_seconds
-            existing.duration = payload.duration
-            existing.completed = completed
-            existing.client_updated_at = incoming_time
-            accepted_update = True
-        else:
-            watched_delta = 0.0
-            accepted_update = False
+        watched_delta = min(max(0.0, progress_seconds - previous_progress_seconds), 30.0)
 
     if parsed_media is not None:
-        media_state = existing
         if accepted_update:
             media_seconds = 0 if completed else progress_seconds
             media_duration = payload.duration
             media_completed = completed
             media_client_updated_at = incoming_time
         else:
-            media_seconds = media_state.progress_seconds
-            media_duration = media_state.duration
-            media_completed = media_state.completed
-            media_client_updated_at = as_utc(media_state.client_updated_at)
+            media_seconds = saved.progress_seconds
+            media_duration = saved.duration
+            media_completed = saved.completed
+            media_client_updated_at = as_utc(saved.client_updated_at)
         media = save_media_progress(
             db,
             user_id=user.id,
@@ -110,13 +149,12 @@ def sync_progress(payload: ProgressSyncRequest, background_tasks: BackgroundTask
             completed=media_completed,
             client_updated_at=media_client_updated_at,
         )
-        existing.media_progress_id = media.id
+        saved.media_progress_id = media.id
         if media_progress_id is not None and media_progress_id != media.id:
             db.flush()
             refresh_media_progress(db, {media_progress_id})
-    elif existing.media_progress_id is not None:
-        media_progress_id = existing.media_progress_id
-        existing.media_progress_id = None
+    elif saved.media_progress_id is not None:
+        saved.media_progress_id = None
         db.flush()
         refresh_media_progress(db, {media_progress_id})
 
@@ -212,6 +250,52 @@ def list_media_progress(
             for item in items
         ],
     )
+
+
+@router.get("/sites", response_model=list[SiteInfo])
+def list_watched_sites(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[SiteInfo]:
+    grouped_sites = db.execute(
+        select(
+            func.lower(PlaybackProgress.site_host),
+            func.max(PlaybackProgress.updated_at),
+        )
+        .where(
+            PlaybackProgress.user_id == user.id,
+            PlaybackProgress.site_host.is_not(None),
+            PlaybackProgress.site_host != "",
+        )
+        .group_by(func.lower(PlaybackProgress.site_host))
+        .order_by(func.max(PlaybackProgress.updated_at).desc())
+    ).all()
+    stored_names = {
+        site.site_host.lower(): site.site_name
+        for site in db.scalars(select(UserSite).where(UserSite.user_id == user.id)).all()
+    }
+
+    sites = []
+    for host, last_watched_at in grouped_sites:
+        if not host:
+            continue
+        normalized_host = host.lower()
+        stored_name = stored_names.get(normalized_host, normalized_host)
+        site_name = stored_name
+        if stored_name == normalized_host:
+            site_name = next(
+                (
+                    name
+                    for domain, name in SITE_NAMES.items()
+                    if normalized_host == domain or normalized_host.endswith(f".{domain}")
+                ),
+                normalized_host,
+            )
+        sites.append(
+            SiteInfo(
+                site_host=normalized_host,
+                site_name=site_name,
+                last_watched_at=as_utc(last_watched_at),
+            )
+        )
+    return sites
 
 
 @router.get("/list", response_model=ProgressListResponse)

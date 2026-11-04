@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -80,6 +81,65 @@ def test_register_login_and_progress_round_trip():
     history = client.get("/api/v1/progress/list", headers=headers)
     assert history.status_code == 200
     assert history.json()["total"] == 1
+
+
+def test_concurrent_progress_sync_keeps_one_record_for_url_hash():
+    headers = auth_headers()
+    payload = {
+        "url_hash": "c" * 64,
+        "clean_url": "https://example.com/concurrent",
+        "title": "Concurrent video",
+        "progress_seconds": 120,
+        "duration": 600,
+        "site_host": "example.com",
+    }
+
+    def sync_once(_index: int) -> int:
+        with TestClient(app) as concurrent_client:
+            response = concurrent_client.post(
+                "/api/v1/progress/sync",
+                headers=headers,
+                json=payload,
+            )
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(sync_once, range(8)))
+
+    assert statuses == [200] * 8
+    from app.models import PlaybackProgress
+
+    with SessionLocal() as db:
+        assert db.query(PlaybackProgress).filter_by(url_hash="c" * 64).count() == 1
+
+
+def test_watched_sites_are_aggregated_from_playback_history():
+    headers = auth_headers()
+    watched_sites = (
+        ("d" * 64, "example.com"),
+        ("e" * 64, "example.com"),
+        ("f" * 64, "videos.example.org"),
+    )
+    for url_hash, host in watched_sites:
+        response = client.post(
+            "/api/v1/progress/sync",
+            headers=headers,
+            json={
+                "url_hash": url_hash,
+                "clean_url": f"https://{host}/video",
+                "title": "Video",
+                "progress_seconds": 20,
+                "duration": 600,
+                "site_host": host,
+            },
+        )
+        assert response.status_code == 200
+
+    response = client.get("/api/v1/admin/progress/sites", headers=headers)
+
+    assert response.status_code == 200
+    sites = response.json()
+    assert {site["site_host"] for site in sites} == {"example.com", "videos.example.org"}
 
 
 def test_progress_sync_checks_site_title_only_once(monkeypatch):

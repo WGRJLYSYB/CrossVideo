@@ -67,6 +67,12 @@ const router = createRouter({
           meta: { requiresAuth: true, title: '影视进度' },
         },
         {
+          path: 'watched-sites',
+          name: 'watched-sites',
+          component: () => import('@/views/WatchedSitesView.vue'),
+          meta: { requiresAuth: true, title: '观看过的网站' },
+        },
+        {
           path: 'favorites',
           name: 'favorites',
           component: () => import('@/views/favorites/FavoritesView.vue'),
