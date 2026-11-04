@@ -24,8 +24,8 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       caddy: ${{ steps.filter.outputs.caddy }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
           filters: |
@@ -51,7 +51,7 @@ jobs:
     needs: [changes]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Copy root docker-compose.yml to Server
         uses: appleboy/scp-action@v0.1.7
@@ -84,7 +84,7 @@ jobs:
     if: needs.changes.outputs.postgres == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Extract short Git SHA
         id: vars
@@ -92,16 +92,16 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build and push postgres image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./postgres
           file: ./postgres/Dockerfile
@@ -110,7 +110,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-postgres:latest
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-postgres:${{ steps.vars.outputs.sha_short }}
 
-      - name: Deploy Postgres via SSH
+      - name: Deploy Postgres via SSH (with retry)
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -120,9 +120,20 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
-            docker compose pull postgres
-            docker compose up -d --no-deps --remove-orphans postgres
-            docker image prune -f || true
+            
+            for i in {1..3}; do
+              echo "=== 尝试执行 Postgres 部署 (第 $i 次) ==="
+              if docker compose pull postgres && docker compose up -d --no-deps --remove-orphans postgres; then
+                echo "=== 部署成功！ ==="
+                docker image prune -f || true
+                exit 0
+              fi
+              echo "=== 部署失败，等待 10 秒后重试... ==="
+              sleep 10
+            done
+            
+            echo "=== 错误：重试 3 次后依然失败！ ==="
+            exit 1
 
   # -------------------------------------------------------------
   # 3. 后端 CI/CD（依赖 compose 闸门，且仅当 backend 目录改变时运行）
@@ -132,7 +143,7 @@ jobs:
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Extract short Git SHA
         id: vars
@@ -140,16 +151,16 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -158,7 +169,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:latest
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-backend:${{ steps.vars.outputs.sha_short }}
 
-      - name: Deploy Backend via SSH
+      - name: Deploy Backend via SSH (with retry)
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -168,9 +179,20 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
-            docker compose pull backend
-            docker compose up -d --no-deps --remove-orphans backend
-            docker image prune -f || true
+            
+            for i in {1..3}; do
+              echo "=== 尝试执行 Backend 部署 (第 $i 次) ==="
+              if docker compose pull backend && docker compose up -d --no-deps --remove-orphans backend; then
+                echo "=== 部署成功！ ==="
+                docker image prune -f || true
+                exit 0
+              fi
+              echo "=== 部署失败，等待 10 秒后重试... ==="
+              sleep 10
+            done
+            
+            echo "=== 错误：重试 3 次后依然失败！ ==="
+            exit 1
 
   # -------------------------------------------------------------
   # 4. 前端 CI/CD（依赖 compose 闸门，且仅当 frontend 目录改变时运行）
@@ -180,7 +202,7 @@ jobs:
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Extract short Git SHA
         id: vars
@@ -188,16 +210,16 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -206,7 +228,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-frontend:latest
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-frontend:${{ steps.vars.outputs.sha_short }}
 
-      - name: Deploy Frontend via SSH
+      - name: Deploy Frontend via SSH (with retry)
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -216,9 +238,20 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
-            docker compose pull frontend
-            docker compose up -d --no-deps --remove-orphans frontend
-            docker image prune -f || true
+            
+            for i in {1..3}; do
+              echo "=== 尝试执行 Frontend 部署 (第 $i 次) ==="
+              if docker compose pull frontend && docker compose up -d --no-deps --remove-orphans frontend; then
+                echo "=== 部署成功！ ==="
+                docker image prune -f || true
+                exit 0
+              fi
+              echo "=== 部署失败，等待 10 秒后重试... ==="
+              sleep 10
+            done
+            
+            echo "=== 错误：重试 3 次后依然失败！ ==="
+            exit 1
 
   # -------------------------------------------------------------
   # 5. Caddy CI/CD（依赖 compose 闸门，且仅当 caddy 目录改变时运行）
@@ -228,7 +261,7 @@ jobs:
     if: needs.changes.outputs.caddy == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Extract short Git SHA
         id: vars
@@ -236,16 +269,16 @@ jobs:
         run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build and push caddy image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.4.0
         with:
           context: ./caddy
           file: ./caddy/Dockerfile
@@ -254,7 +287,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-caddy:latest
             ${{ secrets.DOCKER_USERNAME }}/crossvideo-caddy:${{ steps.vars.outputs.sha_short }}
 
-      - name: Deploy Caddy via SSH
+      - name: Deploy Caddy via SSH (with retry)
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -264,6 +297,17 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.CROSSVIDEO_ROOT_DIR }}
-            docker compose pull caddy
-            docker compose up -d --no-deps --remove-orphans caddy
-            docker image prune -f || true
+            
+            for i in {1..3}; do
+              echo "=== 尝试执行 Caddy 部署 (第 $i 次) ==="
+              if docker compose pull caddy && docker compose up -d --no-deps --remove-orphans caddy; then
+                echo "=== 部署成功！ ==="
+                docker image prune -f || true
+                exit 0
+              fi
+              echo "=== 部署失败，等待 10 秒后重试... ==="
+              sleep 10
+            done
+            
+            echo "=== 错误：重试 3 次后依然失败！ ==="
+            exit 1
