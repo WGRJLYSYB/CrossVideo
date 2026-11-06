@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         葡萄跨平台视频进度同步（移动端）
-// @description  在不同网站、设备和浏览器之间同步 HTML5 视频观看进度
-// @version      0.1.19
+// @description  在不同网站、设备和浏览器之间同步 HTML5 视频观看进度，尤其支持🎉跨站点追剧进度同步🎉
+// @version      0.1.20
 // @author       WGRJLYSYB
 // @match        *://*/*
 // @grant        GM_setValue
