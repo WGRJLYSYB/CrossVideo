@@ -1,10 +1,8 @@
 // ==UserScript==
-// @name         CrossVideo Mobile 跨平台观看进度同步
-// @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo-mobile.user.js
-// @version      0.1.18
-// @description  CrossVideo 移动端浮动按钮版：同步网页视频观看进度
+// @name         葡萄跨平台视频进度同步（移动端）
+// @description  在不同网站、设备和浏览器之间同步 HTML5 视频观看进度
+// @version      0.1.19
 // @author       WGRJLYSYB
-// @license      AGPL-3.0
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -12,6 +10,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
 // @connect      *
+// @license      AGPL-3.0
 // ==/UserScript==
 
 /*

@@ -23,7 +23,7 @@ See LICENSE file in repository root for full license text.
             <VideoPlay />
           </el-icon>
         </div>
-        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">CrossVideo 管理后台</h1>
+        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">葡萄管理后台</h1>
         <p class="text-sm text-slate-400 mt-1">全平台视频观看进度同步与管理</p>
       </div>
 

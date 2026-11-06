@@ -25,7 +25,7 @@ See LICENSE file in repository root for full license text.
           <el-icon :size="18" class="text-white"><VideoPlay /></el-icon>
         </div>
         <div class="overflow-hidden">
-          <div class="text-base font-bold tracking-tight font-['Outfit'] truncate" :class="isDark ? 'text-white' : 'text-slate-800'">CrossVideo</div>
+          <div class="text-base font-bold tracking-tight font-['Outfit'] truncate" :class="isDark ? 'text-white' : 'text-slate-800'">葡萄</div>
           <div class="text-xs text-indigo-500 font-medium tracking-wide">管理控制台</div>
         </div>
       </div>

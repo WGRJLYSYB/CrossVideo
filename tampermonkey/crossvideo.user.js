@@ -1,10 +1,8 @@
 // ==UserScript==
-// @name         CrossVideo 跨平台观看进度同步
-// @namespace    https://github.com/WGRJLYSYB/CrossVideo/blob/master/tampermonkey/crossvideo.user.js
-// @version      0.1.16
-// @description  在不同网站和设备之间同步 HTML5 视频观看进度
+// @name         葡萄跨平台视频进度同步
+// @description  在不同网站、设备和浏览器之间同步 HTML5 视频观看进度
+// @version      0.1.17
 // @author       WGRJLYSYB
-// @license      AGPL-3.0
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -14,6 +12,7 @@
 // @grant        GM_unregisterMenuCommand
 // @grant        GM_addValueChangeListener
 // @connect      *
+// @license      AGPL-3.0
 // ==/UserScript==
 
 /*
