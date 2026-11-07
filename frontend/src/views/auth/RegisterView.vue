@@ -19,7 +19,7 @@ See LICENSE file in repository root for full license text.
         <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 shadow-lg shadow-indigo-500/30 mb-4">
           <el-icon :size="28" class="text-white"><VideoPlay /></el-icon>
         </div>
-        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">葡萄管理后台</h1>
+        <h1 class="text-2xl font-bold tracking-tight font-['Outfit']" :class="isDark ? 'text-white' : 'text-slate-600'">葡萄视频管理后台</h1>
         <p class="text-sm text-slate-400 mt-1">创建新账号开启多端进度同步</p>
       </div>
 

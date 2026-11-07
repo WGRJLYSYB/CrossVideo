@@ -113,7 +113,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
-  document.title = to.meta.title ? `${to.meta.title} - 葡萄管理后台` : '葡萄管理后台'
+  document.title = to.meta.title ? `${to.meta.title} - 葡萄视频管理后台` : '葡萄视频管理后台'
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
