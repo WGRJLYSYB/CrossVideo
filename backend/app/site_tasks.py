@@ -7,6 +7,7 @@
 # (at your option) any later version.
 
 import logging
+import re
 from html.parser import HTMLParser
 
 import httpx
@@ -78,6 +79,7 @@ def fetch_and_save_site_title(site_id: int) -> None:
             if site is not None and not site.title_fetch_attempted:
                 title = fetch_homepage_title(site.site_host)
                 if title:
+                    title = re.split(r"[-_ ]", title)[0]
                     site.site_name = title
                 site.title_fetch_attempted = True
                 db.commit()

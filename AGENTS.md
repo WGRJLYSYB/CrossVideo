@@ -3,3 +3,10 @@
 - 前端：执行 npm 相关测试、构建、验证命令时，**必须先进入 frontend 目录再运行**，不要在项目根直接跑 npm 命令。
 
 > 不要默认以仓库根目录作为工作目录执行这些命令，这是高频踩坑点。
+
+# 目录说明
+- backend 是后端接口目录，使用 uv + python + fastapi + alembic 开发。
+- caddy 是根据业务场景，自行构建的代理服务器镜像，主要增加了通过acme自动为IP申请证书的功能。
+- frontend 是管理后台的前端页面目录，使用 volta + vite + vue + elementplus + tailwindcss 开发。
+- postgres 是根据业务场景，自行构建的数据库，主要增加了自动通过webdav向网盘同步数据库备份的功能。
+- tampermonkey 是与后台接口配合使用的油猴脚本目录，主要运行在用户浏览器上，执行视频进度上传和提醒用户恢复进度的操作。
