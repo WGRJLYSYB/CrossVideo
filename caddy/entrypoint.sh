@@ -52,7 +52,7 @@ if [ "$CADDY_ENABLE_ACME" = "true" ] && [ -n "$CADDY_SITE_ADDRESS" ]; then
         "$ACME_HOME"/acme.sh --home "$ACME_HOME" --install-cert -d "$CADDY_SITE_ADDRESS" --ecc \
             --key-file "$CERT_DIR/privkey.pem" \
             --fullchain-file "$CERT_DIR/fullchain.pem" \
-            --reloadcmd "caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile && curl "http://localhost:2019/load" -H "Content-Type: text/caddyfile" --data-binary @/etc/caddy/Caddyfile"
+            --reloadcmd "caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile && curl 'http://localhost:2019/load' -H 'Content-Type: text/caddyfile' --data-binary @/etc/caddy/Caddyfile"
 
         # 关闭临时验证服务器
         kill $CADDY_PID
