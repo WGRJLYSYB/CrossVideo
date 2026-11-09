@@ -1,57 +1,49 @@
-interface Env {
-  BACKEND_URL: string;
+import type { ExecutionContext } from '@cloudflare/workers-types';
+
+// 1. 定义环境变量接口
+export interface Env {
+  BACKEND_URL: string; // 对应在 Cloudflare 后台或 wrangler.toml 中配置的环境变量
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    if (!url.pathname.startsWith("/api/")) {
-      return new Response("Not Found", { status: 404 });
-    }
+    // 拦截 /api/ 开头的请求
+    if (url.pathname.startsWith('/api/')) {
+      // 2. 从环境变量中获取后端地址，如果没有配置则给一个默认的降级处理
+      const targetBase = env.BACKEND_URL || 'https://api.yourbackend.com';
 
-    try {
-      const backendPath = url.pathname + url.search;
+      const targetUrl = new URL(targetBase);
+      targetUrl.pathname = url.pathname;
+      targetUrl.search = url.search;
 
-      // 逐个复制请求头，跳过 Host/Origin/Referer
-      // 不含 Host 时，运行时会根据 BACKEND_URL 自动设置正确的 Host
-      const headers = new Headers();
-      for (const [key, value] of request.headers) {
-        const lk = key.toLowerCase();
-        if (lk === "host" || lk === "origin" || lk === "referer") continue;
-        try {
-          headers.append(key, value);
-        } catch (e) {
-          // 跳过其他禁止设置的头
-        }
-      }
-
-      const backendRequest = new Request(env.BACKEND_URL + backendPath, {
+      const modifiedRequest = new Request(targetUrl, {
         method: request.method,
-        headers: headers,
+        headers: request.headers,
         body: request.body,
-        redirect: "manual",
+        redirect: request.redirect,
       });
 
-      const response = await fetch(backendRequest);
+      try {
+        const response = await fetch(modifiedRequest);
 
-      const responseHeaders = new Headers(response.headers);
-      responseHeaders.set("Access-Control-Allow-Origin", url.origin);
+        const newResponse = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
 
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders,
-      });
-    } catch (error) {
-      console.error("Proxy error:", error);
-      return new Response(
-        JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-        {
+        return newResponse;
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        return new Response(JSON.stringify({ error: 'API Gateway Error', details: errorMessage }), {
           status: 502,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
+
+    return fetch(request);
   },
 };

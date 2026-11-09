@@ -2,6 +2,8 @@
 	"name": "crossvideo",
 	"compatibility_date": "2026-10-19",
 	"main": "worker/index.ts",
+    "workers_dev": false,
+    "preview_urls": false,
 	"assets": {
 		"directory": "./dist/",
 		"not_found_handling": "single-page-application",
