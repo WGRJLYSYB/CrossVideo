@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         葡萄跨平台视频进度同步（移动端）
 // @description  在不同网站、设备和浏览器之间同步 HTML5 视频观看进度，尤其支持🎉跨站点追剧进度同步🎉
-// @version      0.1.20
+// @version      0.1.21
 // @author       WGRJLYSYB
 // @match        *://*/*
 // @grant        GM_setValue
@@ -77,9 +77,10 @@ See LICENSE file in repository root for full license text.
         .cv-mobile-completed { display: inline-block; margin-left: 6px; padding: 1px 5px; font-size: 11px; color: #fff; background: #67C23A; border-radius: 4px; }
         .cv-mobile-meta { margin-top: 4px; color: #61706d; font-size: 12px; }
         .cv-mobile-delete { flex: 0 0 auto; border: 0; background: transparent; color: #a12f2f; padding: 3px 5px; font-size: 17px; }
-        .cv-mobile-pages { display: flex; justify-content: center; gap: 12px; margin-top: 12px; }
+        .cv-mobile-pages { display: flex; justify-content: center; gap: 12px; margin-top: 12px; position: relative; }
         .cv-mobile-page { width: 42px; height: 38px; border: 1px solid #c9c1b3; border-radius: 8px; background: #fffdf8; color: #b34a2b; font-size: 19px; }
         .cv-mobile-page:disabled { opacity: .35; }
+        .cv-mobile-page.logout { position: absolute; right: 0; }
         .cv-mobile-notice { position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 9px 14px; border-radius: 8px; background: rgba(24,33,43,.92); color: #fff; box-shadow: 0 5px 18px rgba(0,0,0,.25); pointer-events: auto; }
         .cv-mobile-toast { position: fixed; width: min(310px, calc(100vw - 30px)); padding: 11px; background: rgba(246,244,237,.92); border-left: 3px solid #b34a2b; border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.24); pointer-events: auto; }
         .cv-mobile-toast div { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
@@ -489,12 +490,13 @@ See LICENSE file in repository root for full license text.
 
     const showHistory = async () => {
         if (!token()) { showAuth(); return; }
-        openPanel('<h2>播放历史</h2><div class="cv-mobile-toolbar"><input class="cv-mobile-search" type="search" placeholder="搜索标题或网址"><label class="cv-mobile-filter"><input class="site-only" type="checkbox"> 仅当前网站</label></div><div class="cv-mobile-list"></div><div class="cv-mobile-pages"><button class="cv-mobile-page previous" disabled>←</button><button class="cv-mobile-page next" disabled>→</button></div>', (card) => {
+        openPanel('<h2>播放历史</h2><div class="cv-mobile-toolbar"><input class="cv-mobile-search" type="search" placeholder="搜索标题或网址"><label class="cv-mobile-filter"><input class="site-only" type="checkbox"> 仅当前网站</label></div><div class="cv-mobile-list"></div><div class="cv-mobile-pages"><button class="cv-mobile-page previous" disabled>←</button><button class="cv-mobile-page next" disabled>→</button><button class="cv-mobile-page logout">❌</button></div>', (card) => {
             const list = card.querySelector('.cv-mobile-list');
             const searchInput = card.querySelector('.cv-mobile-search');
             const siteOnly = card.querySelector('.site-only');
             const previous = card.querySelector('.previous');
             const next = card.querySelector('.next');
+            const logout = card.querySelector('.logout');
             const pageSize = 5;
             let page = 1;
             let total = null;
@@ -521,6 +523,7 @@ See LICENSE file in repository root for full license text.
             };
             previous.onclick = () => loadPage(page - 1);
             next.onclick = () => loadPage(page + 1);
+            logout.onclick = async () => { GM_deleteValue(TOKEN_KEY); GM_deleteValue(USERNAME_KEY); stopRealtime(); closePanel(); notice('已退出登录'); };
             siteOnly.onchange = () => { page = 1; total = null; loadPage(1); };
             let searchTimer;
             searchInput.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { search = searchInput.value.trim(); page = 1; total = null; loadPage(1); }, 750); };
